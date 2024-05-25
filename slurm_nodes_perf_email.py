@@ -29,7 +29,7 @@ for line in result.split("\n"):
             email_addr="myemail@example.com" # default email address
     print(" "+load+"%"+"    "+cpus+"  "+node+" "+job+" ",email_addr)
     nodeinfo=load+"%   "+node+"    "+job+" "
-    sub="You job "+myjob+" on the Cluster needs attention"
+    sub="Your job "+myjob+" on the Cluster needs attention"
     contents="""
     
     Dear """+user+""":
