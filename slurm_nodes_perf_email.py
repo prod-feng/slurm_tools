@@ -49,9 +49,6 @@ for line in result.split("\n"):
 
     HPC Support
     """
-#Please check your job settings to make sure your job is functioning well as expected, and it is actually using the resources that it intended to allocate.
-#    print(sub)
-#    print(contents)
     mail_cmd="mail -s '"+sub+"'  -r 'admin@example.com' -b 'admin2@example.com'  "+email_addr+ "  <<EOF" +contents +"""
 EOF"""
     print(mail_cmd)
