@@ -6,7 +6,7 @@ This is a collection of the Slurm tools which are useful.
 ```
 slurm_nodes_perf.py 
 ```
-list all under utilized, or over scribed compute nodes and the jobs on them. good for regular users. The output s like:
+list all under utilized, or over scribed compute nodes and the jobs on them. Good for regular users. The output s like:
 
 ```
 Load    CPUs  Node    Job
