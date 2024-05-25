@@ -24,3 +24,5 @@ Load    CPUs  Node    Job
 slurm_nodes_perf_email.py
 ```
 list all under utilized compute nodes and the jobs on them, and email users. Good for Admin.
+
+N.B. This script can not properly process compute node shared by multiple users at present.
