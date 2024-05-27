@@ -19,7 +19,17 @@ for line in result.split("\n"):
         continue
     myqueue=job.split() #%10i %22P %16j %12u %.10M %10l %.4D %20R#
     myjob=myqueue[0]
+    jobname=myqueue[2]
     user=myqueue[3]
+    #check if the job is interactive or Open Ondemand?
+    if("sys/dashboard" in jobname):
+        print("This is an Open Ondemand job, skip. Jobid=",myjob)
+        continue #Ondemand
+    sconf_cmd="/cm/shared/apps/slurm/current/bin/scontrol show job "+myjob+"|grep BatchFlag=|awk '{print $3}'|sed 's/BatchFlag=//g'"
+    batchflag= subprocess.getoutput(sconf_cmd)
+    if(int(batchflag) < 1):
+        print("This is an interactive job, skip. Jobid=",myjob)
+        continue  #ignore interactive job
     sconf_cmd="/cm/shared/apps/slurm/current/bin/scontrol show job "+myjob+"|grep MailUser|awk '{print $1}'|sed 's/MailUser=//g'"
     email_addr= subprocess.getoutput(sconf_cmd)
     if not email_addr:
