@@ -21,6 +21,12 @@ for line in result.split("\n"):
     myjob=myqueue[0]
     jobname=myqueue[2]
     user=myqueue[3]
+    time=myqueue[4].split("-")
+    #print(time, " len=",len(time))
+    runtime=sum(x * float(t) for x, t in zip([1, 60, 3600],reversed(time[len(time)-1].split(":"))))
+    if(runtime<3600.0): #< 1 hour, ignore...
+        print("This job has been running <=",runtime," seconds. Skips...")
+        continue
     #check if the job is interactive or Open Ondemand?
     if("sys/dashboard" in jobname):
         print("This is an Open Ondemand job, skip. Jobid=",myjob)
