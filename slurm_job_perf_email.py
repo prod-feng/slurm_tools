@@ -124,12 +124,17 @@ for user in job_info_dict:
          email_addr="my@emai.server" #change to your email address
     #print(" "+load+"%"+"    "+cpus+"  "+node+" "+job+" ",email_addr)
     #nodeinfo=load+"%   "+node+"    "+job+" "
+    if len(job_perf_dict[user]) > max_num_report:
+        num_report=max_num_report
+    else:
+        num_report=len(job_perf_dict[user])
+        
     sub="Summary report of your computing jobs performance on SeaWulf Cluster"
     contents="""
     
 Dear """+user+""":
 
-Here is the summary report of randomly selected """+ str(max_num_report)+""" out of """+str(len(job_perf_dict[user]))+""" total jobs on the Seawulf Cluster. Please have a review.   
+Here is the summary report of randomly selected """+ str(num_report)+""" out of """+str(len(job_perf_dict[user]))+""" total jobs on the Seawulf Cluster. Please have a review.   
     """ +job_info_dict[user]+ """ 
 
 Among the metrcs list above, the "CPUUsgae" and "CPURateU2S" are very helpful for checking your jobs' performace and efficiency.
