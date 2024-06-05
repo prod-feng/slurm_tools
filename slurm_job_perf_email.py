@@ -84,7 +84,7 @@ job_info_dict={}
 # Start to construct email body for each user
 for user in job_perf_dict:
     #random pick jobs
-    id_report=1
+    id_report=0
     if len(job_perf_dict[user]) > max_num_report:
         randompick=random.sample(range(1, len(job_perf_dict[user])+1), max_num_report)  #+1, [1,2], sample =[1]
     else:
