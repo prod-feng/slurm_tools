@@ -127,23 +127,26 @@ for user in job_info_dict:
     sub="Summary report of your computing jobs performance on SeaWulf Cluster"
     contents="""
     
-    Dear """+user+""":
+Dear """+user+""":
 
-    Here is the summary report of randomly selected """+ str(max_num_report)+""" out of """+str(len(job_perf_dict[user]))+""" total jobs on the Seawulf Cluster. Please have a review.   
+Here is the summary report of randomly selected """+ str(max_num_report)+""" out of """+str(len(job_perf_dict[user]))+""" total jobs on the Seawulf Cluster. Please have a review.   
     """ +job_info_dict[user]+ """ 
 
-    Among the metrcs list above, the "CPUUsgae" and "CPURateU2S" are very helpful for checking your jobs' performace and efficiency.
+Among the metrcs list above, the "CPUUsgae" and "CPURateU2S" are very helpful for checking your jobs' performace and efficiency.
 
-    "CPUUsgae": which is the rate of your job's real usage of CPU time, divided by the total CPUhours, including idle and working time. If it is far less than 1, then it should be very probably that your jobs under-utilized the resource they requested. Please check your job setting to improve.
+"CPUUsgae": which is the rate of your job's real usage of CPU time, divided by the total CPUhours, including idle and working time: UserCPU/CPUhours. If it is far less than 1, then it should be very probably that your jobs under-utilized the resource they requested. Please check your job setting to improve.
 
-    "CPURateU2S": which is the rate of our job's real usage of CPU time, diveided by the CPU working time: UserCPU/(SystemCPU+UserCPU). If it is far less than 1, then it should be very probably that your jobs over-utilized the resource they requested, e.g., your job started too many processes on the node; used way big sized data set and then RAM, etc.
-    
+"CPURateU2S": which is the rate of our job's real usage of CPU time, diveided by the CPU working time: UserCPU/(SystemCPU+UserCPU). If it is far less than 1, then it should be very probably that your jobs over-utilized the resource they requested, e.g., your job started too many processes on the node; used way big sized data set and then RAM, etc.
 
-    If you have any questions, please submit a ticket.
+"MaxRss": The peak usage of the memory.
 
-    Thanks!
+"MaxVMSize": The peake usage of VM memory.
 
-    HPC Support
+If you have any questions, please submit a ticket.
+
+Thanks!
+
+HPC Support
     """
 #Please check your job settings to make sure your job is functioning well as expected, and it is actually using the resources that it intended to allocate.
 #    print(sub)
