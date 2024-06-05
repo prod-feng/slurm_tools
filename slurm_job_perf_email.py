@@ -85,8 +85,14 @@ job_info_dict={}
 for user in job_perf_dict:
     #random pick jobs
     id_report=1
-    randompick=random.sample(range(1, len(job_perf_dict[user])), max_num_report)
-    print("dandom ",randompick)
+    if len(job_perf_dict[user]) > max_num_report:
+        randompick=random.sample(range(1, len(job_perf_dict[user])+1), max_num_report)  #+1, [1,2], sample =[1]
+    else:
+        randompick=random.sample(range(1, len(job_perf_dict[user])+1), len(job_perf_dict[user]))
+    #print("dandom ",randompick)
+
+    #randompick=random.sample(range(1, len(job_perf_dict[user])), max_num_report)
+    #print("dandom ",randompick)
     #print("Found ",len(job_perf_dict[user])," of User: ",user)
     job_info="\n    USER      JobID     Jobname           start               elapsed      MaxRss      MaxVMSize  nodes  ncpus    CPUhours  CPUUsgae CPURateU2S\n "
 
