@@ -34,7 +34,7 @@ group.add_argument("-j", "--jobs", help="Displays information about the specifie
 
 parser.add_argument("-S", "--starttime", help="Select  jobs in any state after the specified time. YYYY-MM-DD[THH:MM[:SS]]", required=False,default=start)
 parser.add_argument("-E", "--endtime", help="Select  jobs in any state before the specified time", required=False,default=end)
-
+parser.add_argument("-n", "--njobs", help="List njobs  of randomly picked jobs", required=False,default=10,type=int)
 
 args = parser.parse_args()
 
@@ -48,6 +48,11 @@ if args.allusers:
     opt=" -a "
 if args.jobs:
     opt=" -j "+args.jobs
+if args.njobs:
+    if int(args.njobs)<1:
+        args.njobs=10
+else:
+    args.njobs=10 #incase "-n 0)
     
 opt = opt + " -S "+start + " -E "+end
 sacct_cmd="sacct -n -P -s CD " + opt + "  --format=USER,JobID,Jobname%20,partition,state,start,elapsed,MaxRss,MaxVMSize%15,nnodes,ncpus,nodelist,CPUTime%14,SystemCPU%14,TotalCPU%14,UserCPU%14"
@@ -75,6 +80,10 @@ for line in result.split("\n"):
         #same_job_flag=1
         MaxRSS_sum=0
         MaxVMSize_sum=0
+        if(not MaxRSS):
+            MaxRSS=0.
+        if(not MaxVMSize):
+            MaxVMSize=0.
         #print(">>>>Found User:",User,"JobID:",JobID)
         if not User in job_perf_dict:
             job_perf_dict[User]={JobID:[JobName,Partition,State,Start,Elapsed,MaxRSS,MaxVMSize,NNodes,NCPUS,NodeList,CPUTime,SystemCPU,TotalCPU,UserCPU]}
@@ -92,7 +101,7 @@ for line in result.split("\n"):
         #SystemCPU_sec = running_time(SystemCPU)
         #CPUTime_sec = running_time(CPUTime)
     #print("++++++",line)
-    if not User:
+    if not User or User:
         #same_job_flag=0
         if MaxRSS:
             if "G" in MaxRSS:
@@ -122,7 +131,7 @@ for line in result.split("\n"):
 # key    key    0        1      2     3       4     5        6        7      8       9        10      11        12      13
 # USER,JobID,Jobname,partition,state,start,elapsed,MaxRss,MaxVMSize,nnodes,ncpus,nodelist,CPUTime,SystemCPU,TotalCPU,UserCPU
 
-max_num_report=10 #radonmly pick some jobs if too many...
+max_num_report=args.njobs #radonmly pick some jobs if too many...
 job_info_dict={}
 num_report=1
 
@@ -135,7 +144,7 @@ for user in job_perf_dict:
     if len(job_perf_dict[user]) > max_num_report:
         randompick=random.sample(range(1, len(job_perf_dict[user])+1), max_num_report)  #+1, [1,2], sample =[1]
     else:
-        randompick=random.sample(range(1, len(job_perf_dict[user])+1), len(job_perf_dict[user]))
+        randompick=[] #empty it  #random.sample(range(1, len(job_perf_dict[user])+1), len(job_perf_dict[user]))
     #print("dandom ",randompick)
     #print("Found ",len(job_perf_dict[user])," of User: ",user)
     job_info="\n"+"{:>11.10}".format('USER')+"{:>10.10}".format('JobID')+"{:>20.15}".format('Jobname')+ \
@@ -150,9 +159,10 @@ for user in job_perf_dict:
         #    num=random.random() #randomly pick 10 jobs for summary
         #    if num>float(max_num_report)/float(len(job_perf_dict[user])) and num_report<max_num_report:
         #        continue
-        id_report=id_report+1 
-        if not id_report in randompick:
-            continue
+        if len(randompick)>0:
+            id_report=id_report+1 
+            if not id_report in randompick:
+                continue
         #print("Found User/job:",user,job,job_perf_dict[user][job])
         #prepare email body
         #print("time2hours",round(time2hours(job_perf_dict[user][job][10]),2))
