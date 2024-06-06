@@ -30,11 +30,12 @@ group = parser.add_mutually_exclusive_group()
 
 group.add_argument("-u", "--user", help="Use this comma separated list of UIDs or user names to select jobs", required=False,default=uid)
 group.add_argument("--allusers", help="Displays all users' jobs", action='store_true',required=False)
+group.add_argument("-j", "--jobs", help="Displays information about the specified job[.step] or list of job[.step]s", required=False)
 
 parser.add_argument("-S", "--starttime", help="Select  jobs in any state after the specified time. YYYY-MM-DD[THH:MM[:SS]]", required=False,default=start)
 parser.add_argument("-E", "--endtime", help="Select  jobs in any state before the specified time", required=False,default=end)
 
-parser.add_argument("-j", "--jobs", help="Displays information about the specified job[.step] or list of job[.step]s", required=False)
+
 args = parser.parse_args()
 
 if args.user:
@@ -45,7 +46,9 @@ if args.endtime:
     end=args.endtime
 if args.allusers:
     opt=" -a "
-
+if args.jobs:
+    opt=" -j "+args.jobs
+    
 opt = opt + " -S "+start + " -E "+end
 sacct_cmd="sacct -n -P -s CD " + opt + "  --format=USER,JobID,Jobname%20,partition,state,start,elapsed,MaxRss,MaxVMSize%15,nnodes,ncpus,nodelist,CPUTime%14,SystemCPU%14,TotalCPU%14,UserCPU%14"
 
