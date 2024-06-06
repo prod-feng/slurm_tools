@@ -4,6 +4,10 @@ This is a collection of the Slurm tools which are useful.
 
 For the email function, you may need to setup your way to get the users email addresses, and email server, etc.
 
+The print out formats are different from the Linux terminal and Google email.
+
+Python 3.6.
+
 # 1
 ```
 slurm_nodes_perf.py 
