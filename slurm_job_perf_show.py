@@ -152,8 +152,7 @@ for user in job_perf_dict:
              "{:>17.15}".format('MaxRss')+"{:>17.15}".format('MaxVMSize')+ \
              "{:>10.4}".format('nodes')+ "{:>10.5}".format('ncpus')+ \
              "{:>13.11}".format('CPUhours')+  "{:>10.8}".format('CPUUsgae')+ "{:>12.10}".format('CPURateU2S')+"\n "
-    #              slthomas  488502  NEB.WH1.0.91363  2024-06-05T05:53:10  00:00:08          0.0GB        0.39GB     2     80          1.2   0.0139    0.0161 
-    #             jnicasio  359942         sicryres  2024-04-30T16:16:31    1-05:11:54    29.11GB     1655.22GB     6     576     16818.23  0.1658    1.0 
+    # 
     for job in job_perf_dict[user]:
         #if len(job_perf_dict[user])>max_num_report:
         #    num=random.random() #randomly pick 10 jobs for summary
