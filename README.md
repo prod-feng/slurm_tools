@@ -45,7 +45,7 @@ Use sacct command to retrieve the jobs performance info of users. If too many jo
   feng      370607  eva_detrend_day  2024-05-12T11:46:53      00:48:21     5.03GB        10.9GB     1     40         33.2   0.2189    0.8755
 
 
-CPUUsgae=UserCPU/(CPUhours==CPUTime)
+CPUUsgae=UserCPU/(CPUhours==CPUTime elapsed)
 CPURateU2S=UserCPU/(SystemCPU+UserCPU)
 ```
 
