@@ -198,9 +198,9 @@ Here is the summary report of randomly selected """+ str(num_report)+""" out of 
 
 Among the metrcs list above, the "CPUUsgae" and "CPURateU2S" are very helpful for checking your jobs' performace and efficiency.
  
-* "CPUUsgae" *: which is the rate of your job's real usage of CPU time, divided by the total CPUhours, including idle and working time: UserCPU/CPUhours. If it is far less than 1, then it should be very probably that your jobs under-utilized the resource they requested. Please check your job setting to improve.
+"CPUUsgae": which is the rate of your job's real usage of CPU time, divided by the total CPUhours, including idle and working time: UserCPU/CPUhours. It should be very close to 1. If it is less than 1 a lot(like <0.9), then it should be very probably that your jobs under-utilized the resource they requested. Please check your job setting to improve.
 
-"CPURateU2S": which is the rate of our job's real usage of CPU time, diveided by the CPU working time: UserCPU/(SystemCPU+UserCPU). If it is far less than 1, then it should be very probably that your jobs over-utilized the resource they requested, e.g., your job started too many processes on the node; used way big sized data set and then RAM, etc.
+"CPURateU2S": which is the rate of our job's real usage of CPU time, diveided by the CPU working time: UserCPU/(SystemCPU+UserCPU). It should be very close to 1. If it is less than 1(like <0.9), then it should be very probably that your jobs over-utilized the resource they requested, the smaller ratio, the worst, e.g., your job started too many processes on the node; used way big sized data set and then RAM, etc.
 
 "MaxRss": Maximum resident set size of all tasks in job.
 
