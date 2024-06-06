@@ -46,3 +46,10 @@ Use sacct command to retrieve the jobs performance info of users. If too many jo
 CPUUsgae=UserCPU/(CPUhours==CPUTime)
 CPURateU2S=UserCPU/(SystemCPU+UserCPU)
 ```
+
+# 4
+```
+slurm_job_perf_show.py
+```
+
+Same as "slurm_job_perf_email.py", just list all users job info.
