@@ -2,6 +2,8 @@
 
 This is a collection of the Slurm tools which are useful.
 
+For the email function, you may need to setup your way to get the users email addresses, and email server, etc.
+
 # 1
 ```
 slurm_nodes_perf.py 
