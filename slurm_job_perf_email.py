@@ -54,7 +54,7 @@ if args.jobs:
 opt = opt + " -S "+start + " -E "+end
 sacct_cmd="sacct -n -P -s CD " + opt + "  --format=USER,JobID,Jobname%20,partition,state,start,elapsed,MaxRss,MaxVMSize%15,nnodes,ncpus,nodelist,CPUTime%14,SystemCPU%14,TotalCPU%14,UserCPU%14"
 
-print(sacct_cmd)
+#print(sacct_cmd)
 
 # Find completed job ...
 # With format of: node  load  CPUs Status(alloc) 
