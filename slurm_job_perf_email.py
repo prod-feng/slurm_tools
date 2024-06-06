@@ -218,7 +218,10 @@ HPC Support
     #
     mail_cmd="mail -s '"+sub+"'   "+" -S 'Content-Type: text/plain; charset=UTF-8' "+email_addr+ "  <<EOF" +contents +"""
 EOF"""
-    print(mail_cmd)
+    
     if args.emailusers:
         print("Sending email to user: ",user)
+        print(mail_cmd)
         mailit = subprocess.getoutput(mail_cmd)
+    else:
+        print(job_info_dict[user])
