@@ -183,9 +183,9 @@ for user in job_info_dict:
         num_report=max_num_report
     else:
         num_report=len(job_perf_dict[user])
-    sub="Summary report of your computing jobs performance on the Cluster"
+    sub="Summary report of your computing jobs performance on the Cluster\nContent-Type: text/html"
     contents="""
-    
+<pre>    
 Dear """+user+""":
 
 Here is the summary report of randomly selected """+ str(num_report)+""" out of """+str(len(job_perf_dict[user]))+""" total jobs on the Seawulf Cluster. Please have a review.   
@@ -206,10 +206,11 @@ If you have any questions, please submit a ticket.
 Thanks!
 
 HPC Support
+</pre>
     """
 #Please check your job settings to make sure your job is functioning well as expected, and it is actually using the resources that it intended to allocate.
     # 
-    mail_cmd="mail -s '"+sub+"'   "+" -S 'Content-Type: text/plain; charset=UTF-8' "+email_addr+ "  <<EOF" +contents +"""
+    mail_cmd="mail -s '"+sub+"'   "+email_addr+ "  <<EOF" +contents +"""
 EOF"""
     
     if args.emailusers:
