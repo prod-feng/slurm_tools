@@ -35,7 +35,7 @@ N.B. This script can not properly process compute node shared by multiple users 
 
 # 3
 ```
-slurm_job_perf_email.py
+./slurm_job_perf_email.py  --allusers  -S 2024-01-01 -E  now    --csv
 ```
 
 Use sacct command to retrieve the jobs performance info of users. If too many jobs for a user, then randomly pick 10(or more) jobs, email users.
@@ -43,14 +43,13 @@ Use sacct command to retrieve the jobs performance info of users. If too many jo
 ```
     Here is the summary report of randomly selected 10 out of 4638 total jobs on the Seawulf Cluster. Please have a review.   
               
-    USER      JobID     Jobname           start               elapsed      MaxRss      MaxVMSize  nodes  ncpus    CPUhours  CPUUsgae CPURateU2S
-  feng      365392  training_detren  2024-05-04T23:12:21      02:55:21    21.16GB       34.49GB     1     96        281.6   0.3101    0.9826 
-  feng      369660  eva_detrend_day  2024-05-11T06:26:12      01:13:24     5.03GB       19.14GB     1     96        118.4   0.5187    0.9798 
-  feng      370607  eva_detrend_day  2024-05-12T11:46:53      00:48:21     5.03GB        10.9GB     1     40         33.2   0.2189    0.8755
+  USER,    JobID,    Jobname,       Start,    TElapsed,  MemUsed,  MemAsked,  nNodes,  nCPUs,    CPUhours, CPUUsage,  CPUSYST,    CPUUSER,  DiskWrite,   DiskRead,     Partition      ,   NodeList   ,
+  feng,   360256,        bash, 2024-04-29,   00:51:07,      0.0,    388.73,        1,    96,         82.8,       0.0,    0.05,      0.02,       0.0,      1.08,    hbm-short-96core,       node093
+  feng,   360597,  50003_mars, 2024-04-30,   01:50:08,      1.6,    192.03,        1,    40,         74.4,     0.034,    0.13,      2.52,      2.71,      7.12,     extended-40core,       node011
 
 
 CPUUsgae=UserCPU/(CPUhours==CPUTime elapsed)
-CPURateU2S=UserCPU/(SystemCPU+UserCPU)
+
 ```
 
 # 4
