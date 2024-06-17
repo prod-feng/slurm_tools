@@ -54,8 +54,7 @@ def size2KB(size):
 def human_size(size, decimal_places=1):
     #print("size=",size)
     units = ['B', 'K', 'M', 'G', 'T', 'P']
-    #if args.csv:
-    #    units = ['B', 'K', 'M']
+    #
     idx=0
     for un in units:
         #print("OK",idx,units[idx])
@@ -63,7 +62,7 @@ def human_size(size, decimal_places=1):
             size=float(size.split(un)[0])
             break
         idx+=1
-    #print("idx =",idx,units[idx],"  un= ",units[idx+1])    
+    #    
     for un in units[idx:]:
         if size < 1024.0 or un == 'P':
             break
@@ -238,26 +237,14 @@ for user in job_perf_dict:
     #print("dandom ",randompick)
     #print("Found ",len(job_perf_dict[user])," of User: ",user)
     job_info=job_head + "\n "
-    # "\n"+"{:>11.10}".format('USER')+"{:>10.10}".format('JobID')+"{:>12.10}".format('Jobname')+ \
-    #         "{:>12.10}".format('Start')+"{:>12.10}".format('TElapsed')+ \
-    #         "{:>9.8}".format('MemUsed')+ "{:>10.8}".format('MemAsked')+\
-    #         "{:>8.6}".format('nNodes')+ "{:>7.5}".format('nCPUs')+ \
-    #         "{:>12.11}".format('CPUhours')+ color_l+ "{:>10.8}".format('CPUUsage') +color_r+\
-    #          "{:>9.7}".format("CPUSYST") +"{:>11.9}".format("CPUUSER")+"{:>11.9}".format("DiskWrite")+"{:>11.9}".format("DiskRead")+\
-    #          "{:^20.18}".format("Partition")+\
-    #          "{:^14.13}".format('NodeList')+"\n "
-    #              slthomas  488502  NEB.WH1.0.91363  2024-06-05T05:53:10  00:00:08          0.0GB        0.39GB     2     80          1.2   0.0139    0.0161 
-    #             jnicasio  359942         sicryres  2024-04-30T16:16:31    1-05:11:54    29.11GB     1655.22GB     6     576     16818.23  0.1658    1.0 
+    #
     if args.csv:
         job_info=" "
     # initilize num job should be ignored
     num_job_ignore[user] = 0
     # Loop to check this user's jobs
     for job in job_perf_dict[user]:
-        #if len(job_perf_dict[user])>max_num_report:
-        #    num=random.random() #randomly pick 10 jobs for summary
-        #    if num>float(max_num_report)/float(len(job_perf_dict[user])) and num_report<max_num_report:
-        #        continue
+        #
         #if time2hours(job_perf_dict[user][job][4]) <0.5:  #skip short jobs < 1hour
         #    continue
         #
@@ -318,17 +305,14 @@ for user in job_perf_dict:
                   "{:^14.13}".format("  "+str(job_perf_dict[user][job][9]).replace(",","|"))+","
         job_info=job_info  +job_info2+ """ \n """
     job_info_dict[user]=job_info.rstrip()
-    #print("hahah",len(job_info_dict[user]))
+    #
 for user in job_info_dict:
-    #if not args.csv:
-    #print("Found ",len(job_perf_dict[user])," jobs of User: ",user, ", to ignore ",str(num_job_ignore[user])+ " jobs...")
+    #
     if len(job_perf_dict[user]) <= num_job_ignore[user]:
         #no report needed.
         #print("All jobs ignores, for ", user)
         continue
-    #print(job_info_dict[user])
-    #continue
-#    if not email_addr:
+    #
     user_cmd="getent passwd|grep "+user+"|awk -F':' '{print $5}'|awk -F',' '{print $2}'|egrep -ho '[[:graph:]]+@[[:graph:]]+'"
     email_addr=subprocess.getoutput(user_cmd)
     if not email_addr:
@@ -372,7 +356,6 @@ HPC Support
 #Please check your job settings to make sure your job is functioning well as expected, and it is actually using the resources that it intended to allocate.
 #    print(sub)
 #    print("email addr: ",email_addr)
-    #print(contents)
     mail_cmd="mail -s '"+sub+" -S 'Content-Type: text/html; charset=UTF-8' -S 'Content-Transfer-Encoding: quoted-printable' "+email_addr+ "  <<EOF" +contents +"""
 EOF"""
     
