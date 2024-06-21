@@ -294,4 +294,5 @@ for user in job_info_dict:
         #print("All jobs ignores, for ", user)
         continue
 #    
+    print("Found "+str(len(job_perf_dict[user]))," jobs of", user)
     print(job_info_dict[user])
