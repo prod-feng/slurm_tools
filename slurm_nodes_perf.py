@@ -7,7 +7,7 @@ sinfo_cmd="/cm/shared/apps/slurm/current/bin/sinfo -a --Node -o '%.10N %8O %c %.
 # With format of: node  load  CPUs Status(alloc) 
 result = subprocess.getoutput(sinfo_cmd)
 print("   Load   CPUs  Node  Job       partition              jobname           user        Telapsed    Trequsted  nodes   nodenames")
-#0% 96 dg018 389704     extended-96core        1                dvyas        6-02:51:36 7-00:00:00    1 dg018  
+# 
 for line in result.split("\n"):
     #print("Found line",line)
     node,load,cpus,state = line.split()
