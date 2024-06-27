@@ -113,7 +113,7 @@ else:
 
 if not args.allstates:
     if args.state:
-        opt=" -s "+args.state
+        opt+=" -s "+args.state
 
 opt = opt + " -S "+start + " -E "+end
 sacct_cmd="sacct -n -P  " + opt + "  --format=USER,JobID,partition,partition,state,start,elapsed,MaxRss,MaxVMSize%15,nnodes,ncpus,nodelist,CPUTime%15,SystemCPU%15,TotalCPU%15,UserCPU%15,ReqMem,MaxDiskWrite,MaxDiskRead%20,Jobname%20"
