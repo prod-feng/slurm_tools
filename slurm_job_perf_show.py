@@ -86,6 +86,10 @@ parser.add_argument("-S", "--starttime", help="Select  jobs in any state after t
 parser.add_argument("-E", "--endtime", help="Select  jobs in any state before the specified time, default is today", required=False,default=end)
 parser.add_argument("-n", "--njobs", help="List njobs  of randomly picked jobs, default is 10", required=False,default=10,type=int)
 
+state="CD"
+parser.add_argument("-s", "--state", help="Select jobs in specific state", required=False,default=state)
+parser.add_argument("--allstates", help="Displays jobs in all states", action='store_true',required=False)
+
 parser.add_argument("--csv", help="write jobs report to csv format", action='store_true',required=False)
 
 args = parser.parse_args()
@@ -99,12 +103,17 @@ if args.endtime:
 if args.allusers:
     opt=" -a "
 if args.jobs:
-    opt=" -j "+args.jobs
+    opt=" -j "+args.jobs + " -a"
+    args.allstates=1
 if args.njobs:
     if int(args.njobs)<1:
         args.njobs=10
 else:
     args.njobs=10 #incase "-n 0)
+
+if not args.allstates:
+    if args.state:
+        opt=" -s "+args.state
 
 opt = opt + " -S "+start + " -E "+end
 sacct_cmd="sacct -n -P -s CD " + opt + "  --format=USER,JobID,partition,partition,state,start,elapsed,MaxRss,MaxVMSize%15,nnodes,ncpus,nodelist,CPUTime%15,SystemCPU%15,TotalCPU%15,UserCPU%15,ReqMem,MaxDiskWrite,MaxDiskRead%20,Jobname%20"
@@ -202,6 +211,7 @@ job_head=""+"{:>11.10}".format('USER'+sep)+"{:>10.10}".format('JobID'+sep)+"{:>1
              "{:>12.11}".format('CPUhours')+sep + "{:>10.9}".format('CPUUsage'+sep) +\
               "{:>9.7}".format("CPUSYST")+sep +"{:>11.9}".format("CPUUSER")+sep+"{:>11.9}".format("DiskWrite")+sep+"{:>11.9}".format("DiskRead")+sep+\
               "{:^20.18}".format("Partition")+sep+\
+              "{:^11.10}".format('State')+sep+" "+\
               "{:^14.13}".format('NodeList')+sep+" "
 if args.csv:
     print(job_head)
@@ -269,6 +279,7 @@ for user in job_perf_dict:
                   "{:>11.9}".format(str(human_size(str(job_perf_dict[user][job][15])+"G")))+\
                   "{:>11.9}".format(str(human_size(str(job_perf_dict[user][job][16])+"G")))+\
                   "{:^20.18}".format(str(job_perf_dict[user][job][1]))+\
+                  "{:^11.10}".format("  "+str(job_perf_dict[user][job][2]))+\
                   "{:^14.13}".format("  "+str(job_perf_dict[user][job][9]))
         else:
             job_info2="{:>11.10}".format(user)+"," +"{:>11.10}".format(job)+"," +"{:>12.10}".format(job_perf_dict[user][job][0])+","+ \
@@ -282,6 +293,7 @@ for user in job_perf_dict:
                   "{:>11.9}".format(str(size2GB(str(job_perf_dict[user][job][15]))))+","+\
                   "{:>11.9}".format(str(size2GB(str(job_perf_dict[user][job][16]))))+","+\
                   "{:>20.18}".format(str(job_perf_dict[user][job][1]))+","+\
+                  "{:^11.10}".format("  "+str(job_perf_dict[user][job][2]))+","+\
                   "{:^14.13}".format("  "+str(job_perf_dict[user][job][9]).replace(",","|"))+","
         job_info=job_info  +job_info2+ """ \n """
     job_info_dict[user]=job_info.rstrip()
