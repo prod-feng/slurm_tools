@@ -6,6 +6,11 @@ sinfo_cmd="/cm/shared/apps/slurm/current/bin/sinfo -a --Node -o '%.10N %8O %c %.
 
 # With format of: node  load  CPUs Status(alloc) 
 result = subprocess.getoutput(sinfo_cmd)
+
+if len(result)<1:
+    print("No records found. Please try again")
+    quit()
+
 print("   Load   CPUs  Node  Job       partition              jobname           user        Telapsed    Trequsted  nodes   nodenames")
 # 
 for line in result.split("\n"):
