@@ -2,7 +2,7 @@
 import subprocess
 
 # Find out <10% loaded nodes...
-sinfo_cmd="/cm/shared/apps/slurm/current/bin/sinfo -a --Node -o '%.10N %8O %c %.10mMB %.10eMB %.5a %.6t %12E %G'|uniq|grep alloc|grep -v -e a100|awk '{if (($2/$3)<100.3||($2/$3)>0.01) print $1,int($2/$3*100), $3, $7}'|sort -n -k2"
+sinfo_cmd="/cm/shared/apps/slurm/current/bin/sinfo -a --Node -o '%.10N %8O %c %.10mMB %.10eMB %.5a %.6t %12E %G'|uniq|grep alloc|grep -v -e a100|awk '{if (($2/$3)<100.3||($2/$3)>0.) print $1,int($2/$3*100), $3, $7}'|sort -n -k2"
 
 # With format of: node  load  CPUs Status(alloc) 
 result = subprocess.getoutput(sinfo_cmd)
