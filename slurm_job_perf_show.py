@@ -15,6 +15,9 @@ def running_time(time):
     return sum(x * int(t) for x, t in zip([1, 60, 3600,86400], reversed(mytime)))
 
 def time2hours(time):
+    if not time:
+       time="00:00"
+       #print("empty time object",time)# for CANCELD/TIMEOUT jobs    
     time=time.split('.')[0]  #trim the .xxx seconds
     mytime=re.split(":|-",time)
     #print("re,splut", mytime)
