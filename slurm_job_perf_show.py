@@ -53,6 +53,7 @@ def size2KB(size):
 
 def human_size(size, decimal_places=1):
     #print("size=",size)
+    size= size.split("n")[0]  # for compatibility of slurm 17
     units = ['B', 'K', 'M', 'G', 'T', 'P']
     #if args.csv:
     #    units = ['B', 'K', 'M']
@@ -64,6 +65,10 @@ def human_size(size, decimal_places=1):
             break
         idx+=1
     #print("idx =",idx,units[idx],"  un= ",units[idx+1])    
+    if idx > 5: # for compatibility of slurm 17
+        #print("Unit not found, use B")
+        idx=0
+        size=float(size)    
     for un in units[idx:]:
         if size < 1024.0 or un == 'P':
             break
