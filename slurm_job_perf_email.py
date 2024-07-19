@@ -53,6 +53,7 @@ def size2KB(size):
 
 def human_size(size, decimal_places=1):
     #print("size=",size)
+    size= size.split("n")[0] #for compatabilty of Slurm 17
     units = ['B', 'K', 'M', 'G', 'T', 'P']
     #
     idx=0
@@ -63,6 +64,10 @@ def human_size(size, decimal_places=1):
             break
         idx+=1
     #    
+    if idx > 5: #for compatabilty of Slurm 17
+        #print("Unit not found, use B")
+        idx=0
+        size=float(size)    
     for un in units[idx:]:
         if size < 1024.0 or un == 'P':
             break
