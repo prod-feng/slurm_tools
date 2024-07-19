@@ -125,7 +125,8 @@ sacct_cmd="sacct -n -P  " + opt + "  --format=USER,JobID,partition,partition,sta
 
 result = subprocess.getoutput(sacct_cmd)
 
-if len(result)<1:
+if len(result)<1 or len(result.split("|"))<19:
+    print(result)
     print("No records found. Please try again")
     quit()
 
