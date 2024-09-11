@@ -11,7 +11,7 @@ if len(result)<1:
     print("No records found. Please try again")
     quit()
 
-print("   Load   CPUs  Node  Job       partition              jobname           user        Telapsed    Trequsted  nodes   nodenames")
+print("   Load   CPUs  Node  Job       partition              jobname           user        Telapsed    Trequsted    CPUs       nodes   nodenames")
 # 
 for line in result.split("\n"):
     #print("Found line",line)
