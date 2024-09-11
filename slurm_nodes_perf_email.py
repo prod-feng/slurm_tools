@@ -18,7 +18,7 @@ for line in result.split("\n"):
     node,load,cpus,state = line.split()
     #print("Found node: ",node, " with Load: ",load, " CPUS: ",cpus)
     #ignore shared queue now...fix later...
-    squeue_cmd="/cm/shared/apps/slurm/current/bin/squeue -o '%10i %22P %16j %12u %.10M %10l %.10D %20R' -ahw " + node + "|grep -v -e shared"
+    squeue_cmd="/cm/shared/apps/slurm/current/bin/squeue -o '%10i %22P %16j %12u %.10M %10l  %.6C  %.10D %20R' -ahw " + node + "|grep -v -e shared"
     job = subprocess.getoutput(squeue_cmd)
     if not job:  #empty or shared jobs?
         continue
@@ -50,14 +50,15 @@ for line in result.split("\n"):
             email_addr="myemail@example.com" # default email address
     print(" "+load+"%"+"    "+cpus+"  "+node+" "+job+" ",email_addr)
     nodeinfo=load+"%   "+node+"    "+job+" "
-    sub="Your job "+myjob+" on the Cluster needs attention"
+    sub="Your job "+myjob+" on the Cluster needs attention\nContent-Type: text/html"
     contents="""
-    
+<body style="font-family: sans-serif, Arial, Helvetica;">    
+<pre>  
     Dear """+user+""":
 
     It seems that your computing job """+myjob+""" is under utilizing the compute node it is running on. The utilization of the node is as follows:
 
-  Load  NodeName   JobID         Partition                JobName         User       Time      Time_limit      Nodes Nodelist 
+  Load  NodeName   JobID         Partition                JobName         User       Time      Time_limit    CPUs       Nodes Nodelist 
     """ + nodeinfo + """ 
 
     Please note that the load on this node is at only """+load+"""%.
@@ -69,6 +70,8 @@ for line in result.split("\n"):
     Thanks!
 
     HPC Support
+</pre>
+<body>    
     """
     mail_cmd="mail -s '"+sub+"'  -r 'admin@example.com' -b 'admin2@example.com'  "+email_addr+ "  <<EOF" +contents +"""
 EOF"""
