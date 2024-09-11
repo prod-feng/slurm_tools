@@ -17,7 +17,7 @@ for line in result.split("\n"):
     #print("Found line",line)
     node,load,cpus,state = line.split()
     #print("Found node: ",node, " with Load: ",load, " CPUS: ",cpus)
-    squeue_cmd="/cm/shared/apps/slurm/current/bin/squeue -t r -o '%10i %22P %16j %12u %.10M %10l %.4D %20R' -ahw " + node
+    squeue_cmd="/cm/shared/apps/slurm/current/bin/squeue -t r -o '%10i %22P %16j %12u %.10M %10l  %.6C  %.4D %20R' -ahw " + node
     #print("squeue_cmd ",squeue_cmd)
     job = subprocess.getoutput(squeue_cmd).split("\n")[0]
     #print("Found job: ")
