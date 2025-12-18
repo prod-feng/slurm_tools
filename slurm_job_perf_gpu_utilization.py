@@ -291,7 +291,7 @@ for user in job_perf_dict:
     #          "{:^20.18}".format("Partition")+\
     #          "{:^14.13}".format('NodeList')+"\n "
     #              slthomas  488502  NEB.WH1.0.91363  2024-06-05T05:53:10  00:00:08          0.0GB        0.39GB     2     80          1.2   0.0139    0.0161 
-    #             jnicasio  359942         sicryres  2024-04-30T16:16:31    1-05:11:54    29.11GB     1655.22GB     6     576     16818.23  0.1658    1.0 
+    #             xx  359942         sicryres  2024-04-30T16:16:31    1-05:11:54    29.11GB     1655.22GB     6     576     16818.23  0.1658    1.0 
     if args.csv:
         job_info=" "
     # initilize num job should be ignored
@@ -438,7 +438,7 @@ Among the metrcs list above, the "CPUUsgae" is very helpful for checking your jo
 
 "MemUsed": The maximum memory used by the job. Due to our current setting, it sometimes can be accounted repeatedly for the same memory usage, which in turn can show a number larger than the requested memory. This offten happens to multiple threading jobs. The rough estimate for the correted MemUsed in this case can be obtained by MemUsed/nCPUs. This issue will be fixed later when we have a chance to upgrade Slurm. 
 
-If you have any questions, please submit a ticket through https://iacs.supportsystem.com/.
+If you have any questions, please submit a ticket through xxx.
 
 Thanks!
 
@@ -451,7 +451,7 @@ HPC Support
 #    print(sub)
 #    print("email addr: ",email_addr)
     #print(contents)
-    mail_cmd="mail -s '"+sub+"'  -r 'hpc_support@stonybrook.edu' -b 'feng.zhang@stonybrook.edu'  "+" -S 'Content-Type: text/html; charset=UTF-8' -S 'Content-Transfer-Encoding: quoted-printable' "+email_addr+ "  <<EOF" +contents +"""
+    mail_cmd="mail -s '"+sub+"'  -r 'xxx' -b 'xxx'  "+" -S 'Content-Type: text/html; charset=UTF-8' -S 'Content-Transfer-Encoding: quoted-printable' "+email_addr+ "  <<EOF" +contents +"""
 EOF"""
     
     #print(mail_cmd)
