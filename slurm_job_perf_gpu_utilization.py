@@ -209,15 +209,18 @@ for line in result.split("\n"):
         if (TRESUsageInAve.strip()!="" and 'gpu' in TRESUsageInAve):
             #print("TRESUsageInAve= ", TRESUsageInAve)
             gpuutil=TRESUsageInAve.split(",")[4]
-            if("billing" in AllocTRES):
-                gpunum=AllocTRES.split(",")[2]
+            if('gpu' in AllocTRES):
+                if("billing" in AllocTRES):
+                    gpunum=AllocTRES.split(",")[2]
+                else:
+                    gpunum=AllocTRES.split(",")[1]
+                if(not 'gres/gpu' in gpunum):
+                    print("Warning: Wrong gpunum!")
+                if(not 'gres/gpuutil=' in gpuutil):
+                    print("Warning: Wrong gpuutil!")
+                gpu_num=gpunum.split("=")[1]
             else:
-                gpunum=AllocTRES.split(",")[1]
-            if(not 'gres/gpu' in gpunum):
-                print("Warning: Wrong gpunum!")
-            if(not 'gres/gpuutil=' in gpuutil):
-                print("Warning: Wrong gpuutil!")
-            gpu_num=gpunum.split("=")[1]
+                gpu_num=1 # just avoid /zero
             g_util=int(gpuutil.split("=")[1])/int(gpu_num)
             gpuutil_sum=gpuutil_sum+g_util
             #print("GPU utiliation: ",gpuutil,gpunum,g_util, JobID,gpuutil_sum)
@@ -406,7 +409,7 @@ for user in job_info_dict:
     user_cmd="getent passwd|grep "+user+"|awk -F':' '{print $5}'|awk -F',' '{print $2}'|egrep -ho '[[:graph:]]+@[[:graph:]]+'"
     email_addr=subprocess.getoutput(user_cmd)
     if not email_addr:
-         email_addr="feng.zhang@xxx"
+         email_addr="feng.zhang@stonybrook.edu"
     #nodeinfo=load+"%   "+node+"    "+job+" "
     if len(job_perf_dict[user]) > max_num_report:
         num_report=max_num_report
@@ -435,7 +438,7 @@ Among the metrcs list above, the "CPUUsgae" is very helpful for checking your jo
 
 "MemUsed": The maximum memory used by the job. Due to our current setting, it sometimes can be accounted repeatedly for the same memory usage, which in turn can show a number larger than the requested memory. This offten happens to multiple threading jobs. The rough estimate for the correted MemUsed in this case can be obtained by MemUsed/nCPUs. This issue will be fixed later when we have a chance to upgrade Slurm. 
 
-If you have any questions, please submit a ticket through xxx.
+If you have any questions, please submit a ticket through https://iacs.supportsystem.com/.
 
 Thanks!
 
@@ -448,7 +451,7 @@ HPC Support
 #    print(sub)
 #    print("email addr: ",email_addr)
     #print(contents)
-    mail_cmd="mail -s '"+sub+"'  -r 'xxx' -b 'xxxx'  "+" -S 'Content-Type: text/html; charset=UTF-8' -S 'Content-Transfer-Encoding: quoted-printable' "+email_addr+ "  <<EOF" +contents +"""
+    mail_cmd="mail -s '"+sub+"'  -r 'hpc_support@stonybrook.edu' -b 'feng.zhang@stonybrook.edu'  "+" -S 'Content-Type: text/html; charset=UTF-8' -S 'Content-Transfer-Encoding: quoted-printable' "+email_addr+ "  <<EOF" +contents +"""
 EOF"""
     
     #print(mail_cmd)
@@ -460,4 +463,3 @@ EOF"""
         print(job_info_dict[user])
 for user in gpu_util_eff:
      print("sacctmgr modify user",user, "set -i priority=%d"%gpu_util_eff[user]["eff"])
-
