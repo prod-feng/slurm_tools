@@ -58,3 +58,11 @@ slurm_job_perf_show.py
 ```
 
 Same as "slurm_job_perf_email.py", just list all users job info.
+
+# 5 
+```
+slurm_job_perf_gpu_utilization.py
+```
+
+Check users' GPU jobs utilization efficiency in the past week. Modify users' ASSOC priority factors accordingly, vary from 80 to 100(with GPU efficiency vary from 0% to 100%).
+
