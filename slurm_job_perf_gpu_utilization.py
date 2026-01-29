@@ -8,6 +8,8 @@ from datetime import datetime, timedelta
 
 # Find completed job ...
 
+
+debug =0 
 def running_time(time):
     time=time.split('.')[0]  #trim the .xxx seconds
     mytime=re.split(":|-",time)
@@ -121,9 +123,11 @@ if not args.allstates:
         opt+=" -s "+args.state
 
 opt = opt + " -S "+start + " -E "+end
-sacct_cmd="sacct -n -P " + opt + "  --format=USER,JobID,partition,partition,state,start,elapsed,MaxRss,MaxVMSize%15,nnodes,ncpus,nodelist,CPUTime%15,SystemCPU%15,TotalCPU%15,UserCPU%15,ReqMem,MaxDiskWrite,MaxDiskRead%20,Jobname%20,TRESUsageInAve%130,AllocTRES%100"
+sacct_cmd="/cm/shared/apps/slurm/current/bin/sacct -n -P " + opt + "  --format=USER,JobID,partition,partition,state,start,elapsed,MaxRss,MaxVMSize%15,nnodes,ncpus,nodelist,CPUTime%15,SystemCPU%15,TotalCPU%15,UserCPU%15,ReqMem,MaxDiskWrite,MaxDiskRead%20,Jobname%20,TRESUsageInAve%130,AllocTRES%100"
 
-print(sacct_cmd)
+#debug=10 
+if (debug>0): 
+    print(sacct_cmd)
 
 # Find completed job ...
 # With format of: node  load  CPUs Status(alloc) 
@@ -240,7 +244,8 @@ job_info_dict={}
 num_report=1
 
 # Start to construct email body for each user
-print("Found ",len(job_perf_dict)," Users")
+if debug>0: 
+    print("Found ",len(job_perf_dict)," Users")
 if args.csv:
     sep=","
 else: 
@@ -291,7 +296,7 @@ for user in job_perf_dict:
     #          "{:^20.18}".format("Partition")+\
     #          "{:^14.13}".format('NodeList')+"\n "
     #              slthomas  488502  NEB.WH1.0.91363  2024-06-05T05:53:10  00:00:08          0.0GB        0.39GB     2     80          1.2   0.0139    0.0161 
-    #             xx  359942         sicryres  2024-04-30T16:16:31    1-05:11:54    29.11GB     1655.22GB     6     576     16818.23  0.1658    1.0 
+    #             jnicasio  359942         sicryres  2024-04-30T16:16:31    1-05:11:54    29.11GB     1655.22GB     6     576     16818.23  0.1658    1.0 
     if args.csv:
         job_info=" "
     # initilize num job should be ignored
@@ -389,12 +394,13 @@ for user in job_perf_dict:
         if(elapsed_sum <=0):
             elapsed_sum=1.0  #avoid by dividing by Zero
     
-        gpu_eff=int(gpu_util_sum/elapsed_sum)
-        if(gpu_eff<1):
-            gpu_eff=1  # set the minumum
+        gpu_eff=int(gpu_util_sum/elapsed_sum*0.2) + 80 # force range from 80 to 100
+        #if(gpu_eff<1):
+        #    gpu_eff=1  # set the minumum
         gpu_util_eff[user]={"eff":gpu_eff}
         #if(gpu_util_sum/(100*elapsed_sum) <2 ):
-        print("Found under utilization GPUs of:",user, " assoc_priority_factor=", gpu_eff, "/100")
+        if (debug>0): 
+            print("Found under utilization GPUs of:",user, " assoc_priority_factor=", gpu_eff, "/100")
     #print("hahah",len(job_info_dict[user]))
 for user in job_info_dict:
     #if not args.csv:
@@ -438,7 +444,7 @@ Among the metrcs list above, the "CPUUsgae" is very helpful for checking your jo
 
 "MemUsed": The maximum memory used by the job. Due to our current setting, it sometimes can be accounted repeatedly for the same memory usage, which in turn can show a number larger than the requested memory. This offten happens to multiple threading jobs. The rough estimate for the correted MemUsed in this case can be obtained by MemUsed/nCPUs. This issue will be fixed later when we have a chance to upgrade Slurm. 
 
-If you have any questions, please submit a ticket through xxx.
+If you have any questions, please submit a ticket through https://iacs.supportsystem.com/.
 
 Thanks!
 
@@ -451,7 +457,7 @@ HPC Support
 #    print(sub)
 #    print("email addr: ",email_addr)
     #print(contents)
-    mail_cmd="mail -s '"+sub+"'  -r 'xxx' -b 'xxx'  "+" -S 'Content-Type: text/html; charset=UTF-8' -S 'Content-Transfer-Encoding: quoted-printable' "+email_addr+ "  <<EOF" +contents +"""
+    mail_cmd="mail -s '"+sub+"'  -r xxx' -b 'xxx'  "+" -S 'Content-Type: text/html; charset=UTF-8' -S 'Content-Transfer-Encoding: quoted-printable' "+email_addr+ "  <<EOF" +contents +"""
 EOF"""
     
     #print(mail_cmd)
@@ -461,5 +467,63 @@ EOF"""
         mailit = subprocess.getoutput(mail_cmd)
     elif(args.print):
         print(job_info_dict[user])
+#
+## deal with underutilizing jobs and their users now.
+#
+import csv
+from typing import Dict, List
+import shutil
+
+rows=[]
+csv_users=[]
+csv_users_dict=[]
+ignore_users=[]
+
+filename='/myloaction/gpujobs.csv'
+
+with open(filename, newline='') as csvfile:
+    reader = csv.DictReader(csvfile)
+    rows: List[Dict[str, str]] = list(reader)
+    #print(rows)
+    for row in rows:
+        if(row['user']  in gpu_util_eff):
+            csv_users.append(row['user'])
+        else:
+            ignore_users.append(row['user'])
+            #print('Ignore this user:', row['user'], row['last'])
+
 for user in gpu_util_eff:
-     print("sacctmgr modify user",user, "set -i priority=%d"%gpu_util_eff[user]["eff"])
+    if user not in csv_users:
+        csv_users.append(user)
+        if debug>0:
+            print("new user",user, end)
+
+simple_end=datetime.now().strftime("%Y-%m-%d")
+for user in csv_users:
+    useritems={}
+    #print("csv users:",user)
+    useritems['user']=user
+    useritems['last']=simple_end
+    csv_users_dict.append(useritems)
+
+###Write the new user list out, replace the original one.
+with open(filename+'.tmp', 'w', newline="", encoding="utf-8") as newfile:
+     writer = csv.DictWriter(newfile, fieldnames=['user','last'])
+     writer.writeheader()
+     writer.writerows(csv_users_dict)
+
+shutil.move(filename+'.tmp', filename)
+
+### Genarate appropriate command lines for update the ASSOC priority factors according to GPU utilization efficiency.
+for user in gpu_util_eff:
+    cmdline="sacctmgr modify user {} set -i priority={:2d}".format(user,gpu_util_eff[user]["eff"])
+    print(cmdline)
+    # execute the command now?
+    #os.system(cmdline)
+    #print("sacctmgr modify user",user, "set -i priority=%d"%gpu_util_eff[user]["eff"])
+### Now process the users that do not have jobs in the past week.
+for user in ignore_users:
+    cmdline="sacctmgr modify user {} set -i priority=100".format(user) #reset to 100 after 1 week without any jobs
+    print(cmdline)
+    # execute the command now?
+    #os.system(cmdline)
