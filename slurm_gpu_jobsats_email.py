@@ -93,7 +93,7 @@ If this GPU underutilization is unexpected, please review your job settings to e
 
 Please note: the under-utilization of your past and running GPU jobs' will negatively affect your new jobs' priority in the future.
 
-If you need assistance or have any questions about how to optimize the resource usage for your job, please submit a ticket <a href="https://iacs.supportsystem.com/">HERE</a>.
+If you need assistance or have any questions about how to optimize the resource usage for your job, please submit a ticket <a href="https://xxx.com/">HERE</a>.
 
 Thanks!
 
@@ -105,14 +105,8 @@ HPC Support
 #Please check your job settings to make sure your job is functioning well as expected, and it is actually using the resources that it intended to allocate.
 #    print(sub)
 #    print(contents)
-#    mail_cmd="mail -s '"+sub+"'  -r 'feng.zhang@stonybrook.edu' 'feng.zhang@stonybrook.edu' "+"<<EOF" +contents +"""
-#EOF"""
       # -M 'text/html', for s-nail 14.9
-      #mail_cmd="mail -M 'text/html' -s '"+sub+"'  -r feng.zhang@stonybrook.edu  "+email_addr+ "  <<EOF" +contents +"""
-
-      #mail_cmd="mail -M 'text/html' -s '"+sub+"'  -r 'hpc_support@stonybrook.edu' -b 'feng.zhang@stonybrook.edu,david.carlson@stonybrook.edu'  "+email_addr+ "  <<EOF" +contents +"""
-#EOF"""
-      mail_cmd="mail -M 'text/html' -s '"+sub+"'  -r hpc_support@stonybrook.edu   -b david.carlson@stonybrook.edu  -c hpc_admins@stonybrook.edu "+email_addr+ "  <<EOF" +contents +"""EOF"""
+      mail_cmd="mail -M 'text/html' -s '"+sub+"'  -r xxx@xxx   -b xxx@xxx  -c xxx@xxx "+email_addr+ "  <<EOF" +contents +"""EOF"""
       #print(mail_cmd)
       mailit = subprocess.getoutput(mail_cmd)
 
