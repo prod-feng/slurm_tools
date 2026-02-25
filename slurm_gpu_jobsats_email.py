@@ -19,7 +19,7 @@ Cron:
 """
 
 debug=9
-file_path = "/lustre/nvwulf/admin/scripts/jobstats.csv"
+file_path = "/admin/scripts/jobstats.csv"
 maxcount=6 - 1  # max -1.  E.g.,  6X10 minutes=1 hour. Cronjob interval:10 minues
 emailmax=2    # max emails to users per day
 emailcount=(24/emailmax)*6  # 10 minutes interval, 1 hour has 6 counts
