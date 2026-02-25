@@ -2,7 +2,21 @@
 import os
 import subprocess
 import json
+"""
+Set cronjob:
 
+cat /admin/scripts/slurm_gpu_jobsats.sh
+#!/bin/sh
+source /root/.bashrc
+module load slurm
+/admin/scripts/slurm_gpu_jobsats_email.py
+
+Cron:
+
+#GPU jobs monitor
+*/10 * * * * /admin/scripts/slurm_gpu_jobsats.sh
+
+"""
 
 debug=9
 file_path = "/lustre/nvwulf/admin/scripts/jobstats.csv"
