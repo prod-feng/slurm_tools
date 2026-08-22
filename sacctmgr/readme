@@ -16,7 +16,7 @@
 ```
 
 ```
-usage: slurm_account-users-pi-v2.py [-h] [--summary] [--pi] [--pi-compact] [--tree] [--accounts] [--users] [--validate]
+usage: slurm_account-users.py [-h] [--summary] [--pi] [--pi-compact] [--tree] [--accounts] [--users] [--validate]
 
 Analyze Slurm account hierarchy, users, PIs and project accounts.
 
