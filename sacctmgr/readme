@@ -16,17 +16,78 @@
 ```
 
 ```
-usage: slurm_account-users.py [-h] [--summary] [--pi] [--pi-compact] [--tree] [--accounts] [--users] [--validate]
+$ ./slurm_account-users-v3.py  --help
+usage: slurm_account-users-v3.py [-h] [--summary] [--department PATTERN] [--pi-filter PATTERN] [--pn PATTERN] [--user PATTERN] [--department-summary] [--pi] [--pi-compact] [--tree] [--accounts] [--users]
+                                    [--validate]
 
 Analyze Slurm account hierarchy, users, PIs and project accounts.
 
 options:
-  -h, --help    show this help message and exit
-  --summary     Show overall account/user summary.
-  --pi          Show detailed PI-centric summary.
-  --pi-compact  Show compact PI summary.
-  --tree        Show account hierarchy including users.
-  --accounts    List accounts grouped by type.
-  --users       List users by account.
-  --validate    Validate account hierarchy.
+  -h, --help            show this help message and exit
+  --summary             Show overall account/user summary.
+  --department, --dept PATTERN
+                        Filter departments using wildcard pattern.
+  --pi-filter PATTERN   Filter pi_* accounts using wildcard pattern.
+  --pn PATTERN          Filter pn_* accounts using wildcard pattern.
+  --user PATTERN        Filter users using wildcard pattern.
+  --department-summary, --dept-summary
+                        Show department-centric summary.
+  --pi                  Show detailed PI-centric summary.
+  --pi-compact          Show compact PI summary.
+  --tree                Show account hierarchy including users.
+  --accounts            List accounts grouped by type.
+  --users               List users by account.
+  --validate            Validate account hierarchy.
+
+Examples:
+
+  Show everything:
+    slurm_account-users-v3.py
+
+  Overall summary:
+    slurm_account-users-v3.py --summary
+
+  All departments:
+    slurm_account-users-v3.py --dept 'dept_*'
+
+  Specific department:
+    slurm_account-users-v3.py --dept 'dept_computer_science'
+
+  Departments beginning with "dept_com":
+    slurm_account-users-v3.py --dept 'dept_com*'
+
+  PIs beginning with "pi_f":
+    slurm_account-users-v3.py --pi-filter 'pi_f*'
+
+  Specific project:
+    slurm_account-users-v3.py --pn 'pn_cs'
+
+  Projects beginning with "pn_cs":
+    slurm_account-users-v3.py --pn 'pn_cs*'
+
+  Users beginning with "feng":
+    slurm_account-users-v3.py --user 'feng*'
+
+  Users containing "zh":
+    slurm_account-users-v3.py --user '*zh*'
+
+  Compact PI report for matching PIs:
+    slurm_account-users-v3.py --pi-compact --pi-filter 'pi_f*'
+
+  Detailed PI report:
+    slurm_account-users-v3.py --pi --pi-filter 'pi_f*'
+
+  List matching accounts:
+    slurm_account-users-v3.py --accounts --pi-filter 'pi_f*'
+
+  List matching users:
+    slurm_account-users-v3.py --users --user 'feng*'
+
+  Combine filters:
+    slurm_account-users-v3.py --pi-compact --dept 'dept_cs*'
+
+Wildcard syntax follows Python fnmatch/shell-style matching:
+    *   matches any number of characters
+    ?   matches one character
+    [abc] matches one character from the set
 ```
