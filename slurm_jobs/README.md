@@ -386,7 +386,7 @@ bcc =
 The subject can be changed without modifying Python:
 
 ```ini
-subject = SeaWulf Job Performance Report
+subject = HPC Job Performance Report
 ```
 
 ## Email Template
@@ -604,18 +604,6 @@ src/emailer.py
 ```
 
 ## Troubleshooting
-
-### `ModuleNotFoundError: No module named 'dataclasses'`
-
-The project is designed for Python 3 and does not require the `dataclasses` backport package.
-
-Check:
-
-```bash
-python3 --version
-```
-
-If using an older Python installation, upgrade to a supported Python 3 version.
 
 ### `sacct: command not found`
 
