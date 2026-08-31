@@ -1,151 +1,177 @@
-import configparser
+import os
 import subprocess
-from pathlib import Path
-from typing import Optional
+
+from .utils import project_root
 
 
-class Emailer:
-    """Handle email configuration, template rendering and delivery."""
+class EmailError(RuntimeError):
+    """Raised when email delivery fails."""
 
-    def __init__(self, config_file: Path):
-        self.config_file = Path(config_file)
 
-        if not self.config_file.exists():
-            raise FileNotFoundError(
-                f"Email configuration file not found: "
-                f"{self.config_file}"
-            )
+class Emailer(object):
+    """
+    Email delivery and template handling.
 
-        self.config = configparser.ConfigParser()
-        self.config.read(self.config_file)
+    Email configuration is kept in slurm_report.conf and the actual
+    message body is kept in an external HTML template.
+    """
 
-        if "email" not in self.config:
-            raise ValueError(
-                "Missing [email] section in "
-                f"{self.config_file}"
-            )
+    def __init__(self, config):
+        self.config = config
 
-        email_config = self.config["email"]
-
-        self.sender = email_config.get(
+        self.sender = config.get(
+            "email",
             "sender",
             fallback="",
         ).strip()
 
-        self.cc = self._split_addresses(
-            email_config.get(
+        self.cc = self._address_list(
+            config.get(
+                "email",
                 "cc",
                 fallback="",
             )
         )
 
-        self.bcc = self._split_addresses(
-            email_config.get(
+        self.bcc = self._address_list(
+            config.get(
+                "email",
                 "bcc",
                 fallback="",
             )
         )
 
-        self.subject = email_config.get(
-            "subject",
+        self.fallback_recipient = config.get(
+            "email",
+            "fallback_recipient",
+            fallback="",
+        ).strip()
+
+        self.mail_command = config.get(
+            "email",
+            "mail_command",
+            fallback="mail",
+        ).strip()
+
+        self.job_subject = config.get(
+            "email",
+            "job_subject",
             fallback="Slurm Job Performance Report",
         ).strip()
 
-        if not self.sender:
-            raise ValueError(
-                "Email sender is not configured."
-            )
+        self.node_subject = config.get(
+            "email",
+            "node_subject",
+            fallback="Slurm Node Performance Alert",
+        ).strip()
 
-        if not self.subject:
-            raise ValueError(
-                "Email subject is not configured."
+        self.job_template = self._template_path(
+            config.get(
+                "templates",
+                "job_report",
+                fallback="job_report.html",
             )
+        )
+
+        self.node_template = self._template_path(
+            config.get(
+                "templates",
+                "node_alert",
+                fallback="node_alert.html",
+            )
+        )
 
     @staticmethod
-    def _split_addresses(value: str):
+    def _address_list(value):
         """
-        Convert comma/semicolon-separated addresses into a list.
-        Empty values result in an empty list.
+        Convert a comma-separated address string into a list.
         """
-
         if not value:
             return []
 
-        value = value.replace(";", ",")
-
         return [
-            address.strip()
-            for address in value.split(",")
-            if address.strip()
+            item.strip()
+            for item in value.split(",")
+            if item.strip()
         ]
 
     @staticmethod
-    def render_template(
-        template_file: Path,
-        **variables,
-    ) -> str:
+    def _template_path(filename):
         """
-        Load an HTML template and substitute Python variables.
-
-        The template uses normal Python str.format() syntax:
-
-            {user}
-            {num_report}
-            {total_jobs}
-            {job_info}
+        Resolve a template relative to the project directory.
         """
+        filename = os.path.expandvars(
+            os.path.expanduser(filename.strip())
+        )
 
-        template_file = Path(template_file)
+        if os.path.isabs(filename):
+            return filename
 
-        if not template_file.exists():
-            raise FileNotFoundError(
-                f"Email template not found: {template_file}"
+        return os.path.join(
+            project_root(),
+            filename,
+        )
+
+    @staticmethod
+    def render_template(path, variables):
+        """
+        Render a template using Python str.format().
+
+        This intentionally keeps the templating mechanism simple:
+        users can edit the HTML directly and use {variable} placeholders.
+        """
+        if not os.path.isfile(path):
+            raise EmailError(
+                "Email template not found: {}".format(path)
             )
 
-        template = template_file.read_text(
-            encoding="utf-8",
-        )
+        with open(path, "r") as handle:
+            template = handle.read()
 
         try:
             return template.format(**variables)
         except KeyError as exc:
-            raise ValueError(
-                f"Unknown template variable: {exc}"
-            ) from exc
+            raise EmailError(
+                "Missing template variable: {}".format(exc)
+            )
 
-    def build_mail_command(
+    def _build_mail_command(
         self,
-        recipient: str,
+        recipient,
+        subject,
     ):
-        """Build the mail command."""
+        """
+        Build the mail command.
+
+        No shell is used, so addresses and subjects are not interpreted
+        as shell commands.
+        """
+        if not recipient:
+            raise EmailError("No email recipient specified.")
 
         command = [
-            "mail",
+            self.mail_command,
             "-s",
-            self.subject,
-            "-r",
-            self.sender,
-            "-S",
-            "Content-Type: text/html; charset=UTF-8",
-            "-S",
-            "Content-Transfer-Encoding: quoted-printable",
+            subject,
         ]
 
+        if self.sender:
+            command.extend([
+                "-r",
+                self.sender,
+            ])
+
         if self.cc:
-            command.extend(
-                [
-                    "-c",
-                    ",".join(self.cc),
-                ]
-            )
+            command.extend([
+                "-c",
+                ",".join(self.cc),
+            ])
 
         if self.bcc:
-            command.extend(
-                [
-                    "-b",
-                    ",".join(self.bcc),
-                ]
-            )
+            command.extend([
+                "-b",
+                ",".join(self.bcc),
+            ])
 
         command.append(recipient)
 
@@ -153,32 +179,82 @@ class Emailer:
 
     def send(
         self,
-        recipient: str,
-        body: str,
+        recipient,
+        subject,
+        html_body,
     ):
-        """Send an HTML email."""
-
-        if not recipient:
-            raise ValueError(
-                "Cannot send email without a recipient."
-            )
-
-        command = self.build_mail_command(recipient)
-
-        result = subprocess.run(
-            command,
-            input=body,
-            text=True,
-            capture_output=True,
-            check=False,
+        """
+        Send an HTML email through the configured mail command.
+        """
+        command = self._build_mail_command(
+            recipient,
+            subject,
         )
 
-        if result.returncode != 0:
-            error = result.stderr.strip()
-
-            raise RuntimeError(
-                f"mail command failed "
-                f"(exit code {result.returncode}): "
-                f"{error}"
+        try:
+            result = subprocess.run(
+                command,
+                input=html_body,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                universal_newlines=True,
+                check=False,
             )
+        except OSError as exc:
+            raise EmailError(
+                "Unable to execute mail command '{}': {}".format(
+                    self.mail_command,
+                    exc,
+                )
+            )
+
+        if result.returncode != 0:
+            raise EmailError(
+                "Email delivery failed for {}: {}".format(
+                    recipient,
+                    result.stderr.strip(),
+                )
+            )
+
+    def send_job_report(
+        self,
+        recipient,
+        variables,
+    ):
+        """
+        Render and send a job-performance report.
+        """
+        subject = self.job_subject.format(**variables)
+
+        body = self.render_template(
+            self.job_template,
+            variables,
+        )
+
+        self.send(
+            recipient,
+            subject,
+            body,
+        )
+
+    def send_node_alert(
+        self,
+        recipient,
+        variables,
+    ):
+        """
+        Render and send a node-performance alert.
+        """
+        subject = self.node_subject.format(**variables)
+
+        body = self.render_template(
+            self.node_template,
+            variables,
+        )
+
+        self.send(
+            recipient,
+            subject,
+            body,
+        )
 

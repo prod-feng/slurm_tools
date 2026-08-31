@@ -1,0 +1,58 @@
+<html>
+<body style="font-family: sans-serif, Arial, Helvetica;">
+
+<pre style="font-family: monospace;">
+
+Dear {user},
+
+{problem_description}
+
+
+Node performance information:
+
+    Status:          {status}
+    Node:            {node}
+    Load:            {load}
+    CPUs:            {cpus}
+    Utilization:     {utilization}%
+
+Job information:
+
+    Job ID:          {job_id}
+    Job Name:        {job_name}
+    Partition:       {partition}
+    Elapsed:         {elapsed}
+    Time Limit:      {time_limit}
+    Requested CPUs:  {job_cpus}
+    Requested Nodes: {job_nodes}
+    Node List:       {job_nodelist}
+
+
+Configured thresholds:
+
+    Low utilization:  below {low_threshold}%
+    High utilization: above {high_threshold}%
+
+
+If the node utilization is very low, please review your job
+configuration and determine whether you are requesting more
+CPU resources than your job actually needs.
+
+If the node utilization is very high, please check whether
+your job is using more CPU threads/processes than the resources
+requested from Slurm.
+
+Please review your job settings to ensure that your job is
+functioning as intended.
+
+If you have any questions, please contact HPC Support.
+
+Thanks!
+
+HPC Support
+
+</pre>
+
+</body>
+</html>
+

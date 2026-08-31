@@ -1,4 +1,7 @@
 """
-Slurm job reporting package.
+Slurm reporting package.
+
+This package provides job-performance and node-performance
+reporting functionality for Slurm clusters.
 """
 

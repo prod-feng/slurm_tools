@@ -1,129 +1,143 @@
-import csv
-import io
 import random
-import subprocess
 
-from .slurm import SlurmJob
 from .utils import (
+    escape_csv,
     human_size,
-    size_to_gb,
-    time_to_hours,
+    safe_int,
+    size2GB,
+    time2hours,
 )
 
 
-class Report:
-    """Container for one user's job report."""
-
-    def __init__(
-        self,
-        user,
-        email_address,
-        job_info,
-        num_report,
-        total_jobs,
-        reportable_jobs,
-    ):
-        self.user = user
-        self.email_address = email_address
-        self.job_info = job_info
-        self.num_report = num_report
-        self.total_jobs = total_jobs
-        self.reportable_jobs = reportable_jobs
-
-
-def get_user_email(user):
+def parse_job_records(result):
     """
-    Get the user's email address from the passwd/GECOS entry.
+    Parse sacct pipe-delimited output into job records.
 
-    Falls back to the HPC support address if no address
-    can be found.
+    Returns:
+
+        {
+            "username": {
+                "jobid": record
+            }
+        }
     """
+    jobs = {}
 
-    fallback = "feng.zhang@stonybrook.edu"
+    if not result:
+        return jobs
 
-    try:
-        result = subprocess.run(
-            ["getent", "passwd", user],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            universal_newlines=True,
-            check=False,
-        )
+    for line in result.splitlines():
+        if not line.strip():
+            continue
 
-        if result.returncode != 0:
-            return fallback
+        fields = line.rstrip("\n").split("|")
 
-        fields = result.stdout.strip().split(":")
+        if len(fields) < 19:
+            continue
 
-        if len(fields) < 5:
-            return fallback
+        (
+            user,
+            job_id,
+            job_name,
+            partition,
+            state,
+            start,
+            elapsed,
+            max_rss,
+            max_vm_size,
+            nnodes,
+            ncpus,
+            nodelist,
+            cpu_time,
+            system_cpu,
+            total_cpu,
+            user_cpu,
+            req_mem,
+            max_disk_write,
+            max_disk_read,
+        ) = fields[:19]
 
-        gecos = fields[4]
+        if not user or not job_id:
+            continue
 
-        for item in gecos.split(","):
-            if "@" in item:
-                return item.strip()
+        record = {
+            "user": user,
+            "job_id": job_id,
+            "job_name": job_name,
+            "partition": partition,
+            "state": state,
+            "start": start,
+            "elapsed": elapsed,
+            "max_rss": size2GB(max_rss),
+            "max_vm_size": size2GB(max_vm_size),
+            "nnodes": safe_int(nnodes),
+            "ncpus": safe_int(ncpus),
+            "nodelist": nodelist,
+            "cpu_time": cpu_time,
+            "system_cpu": system_cpu,
+            "total_cpu": total_cpu,
+            "user_cpu": user_cpu,
+            "req_mem": req_mem,
+            "max_disk_write": size2GB(max_disk_write),
+            "max_disk_read": size2GB(max_disk_read),
+        }
 
-    except OSError:
-        pass
+        jobs.setdefault(user, {})[job_id] = record
 
-    return fallback
-
-
-def normalize_memory(value):
-    """Convert MaxRSS/MaxVMSize to GB."""
-
-    return round(size_to_gb(value), 2)
+    return jobs
 
 
-def calculate_cpu_usage(job):
+def calculate_job_metrics(job):
     """
-    Calculate CPU metrics.
-
-    CPUUsage = UserCPU / CPUTime.
-
-    We retain the original script's +1 hour behavior
-    to avoid division by zero.
+    Calculate derived performance metrics for a job.
     """
+    cpu_hours = time2hours(job["cpu_time"])
+    system_cpu_hours = time2hours(job["system_cpu"])
+    total_cpu_hours = time2hours(job["total_cpu"])
+    user_cpu_hours = time2hours(job["user_cpu"])
 
-    cpu_hours = time_to_hours(job.cpu_time)
-    cpu_hours_for_rate = cpu_hours + 1.0
+    # Keep the original script's behavior of adding one hour to avoid
+    # a zero denominator, but do it explicitly and safely.
+    denominator = max(cpu_hours, 1.0)
 
-    user_cpu_hours = time_to_hours(job.user_cpu)
-    system_cpu_hours = time_to_hours(job.system_cpu)
-    total_cpu_hours = time_to_hours(job.total_cpu)
+    cpu_usage = user_cpu_hours / denominator
 
-    cpu_usage = round(
-        user_cpu_hours / cpu_hours_for_rate,
-        3,
-    )
-
-    return (
-        round(cpu_hours_for_rate, 1),
-        round(user_cpu_hours, 6),
-        round(system_cpu_hours, 6),
-        round(total_cpu_hours, 6),
-        cpu_usage,
-    )
+    return {
+        "cpu_hours": round(cpu_hours, 2),
+        "system_cpu_hours": round(system_cpu_hours, 2),
+        "total_cpu_hours": round(total_cpu_hours, 2),
+        "user_cpu_hours": round(user_cpu_hours, 2),
+        "cpu_usage": round(cpu_usage, 3),
+    }
 
 
-def is_ignored_job(job):
-    """Return True for jobs intentionally excluded from reports."""
+def select_jobs_for_user(records, max_jobs):
+    """
+    Randomly select jobs if more than max_jobs are available.
 
-    return "a100" in job.partition.lower()
+    The selection is deterministic in structure but intentionally
+    random in which jobs are included, matching the original tool.
+    """
+    values = list(records.values())
+
+    if max_jobs <= 0:
+        max_jobs = 10
+
+    if len(values) <= max_jobs:
+        return values
+
+    return random.sample(values, max_jobs)
 
 
-def format_header(csv_mode=False):
-    """Create report header."""
-
-    if csv_mode:
-        fields = [
+def job_header(csv=False):
+    if csv:
+        return ",".join([
             "USER",
             "JobID",
             "Jobname",
             "Start",
             "TElapsed",
-            "MemUsed",
+            "MemUsedGB",
             "MemAsked",
             "nNodes",
             "nCPUs",
@@ -131,38 +145,18 @@ def format_header(csv_mode=False):
             "CPUUsage",
             "CPUSYST",
             "CPUUSER",
-            "DiskWrite",
-            "DiskRead",
+            "DiskWriteGB",
+            "DiskReadGB",
             "Partition",
             "NodeList",
             "State",
-        ]
-
-        output = io.StringIO()
-        writer = csv.writer(output)
-        writer.writerow(fields)
-
-        return output.getvalue().rstrip("\n")
+        ])
 
     return (
-        "{:>11.10}"
-        "{:>10.10}"
-        "{:>12.10}"
-        "{:>12.10}"
-        "{:>12.10}"
-        "{:>9.7}"
-        "{:>10.8}"
-        "{:>8.6}"
-        "{:>7.5}"
-        "{:>12.11}"
-        "{:>10.9}"
-        "{:>9.7}"
-        "{:>11.9}"
-        "{:>11.9}"
-        "{:>11.9}"
-        "{:^20.18}"
-        "{:^14.13}"
-        "{:^8.6}"
+        "{:>10} {:>10} {:>12} {:>12} {:>12} "
+        "{:>10} {:>10} {:>8} {:>7} {:>12} "
+        "{:>10} {:>10} {:>10} {:>11} {:>11} "
+        "{:^16} {:^14} {:^8}"
     ).format(
         "USER",
         "JobID",
@@ -185,175 +179,99 @@ def format_header(csv_mode=False):
     )
 
 
-def format_job(job, csv_mode=False):
-    """Format one job for the report."""
+def format_job(job, csv=False):
+    metrics = calculate_job_metrics(job)
 
-    mem_used = normalize_memory(job.max_rss)
-    mem_asked = size_to_gb(job.req_mem)
+    if csv:
+        values = [
+            job["user"],
+            job["job_id"],
+            job["job_name"],
+            job["start"].split("T")[0],
+            job["elapsed"],
+            "{:.2f}".format(job["max_rss"]),
+            "{:.2f}".format(size2GB(job["req_mem"])),
+            job["nnodes"],
+            job["ncpus"],
+            "{:.2f}".format(metrics["cpu_hours"]),
+            "{:.3f}".format(metrics["cpu_usage"]),
+            "{:.2f}".format(metrics["system_cpu_hours"]),
+            "{:.2f}".format(metrics["user_cpu_hours"]),
+            "{:.2f}".format(job["max_disk_write"]),
+            "{:.2f}".format(job["max_disk_read"]),
+            job["partition"],
+            job["nodelist"].replace(",", "|"),
+            job["state"],
+        ]
 
-    disk_write = size_to_gb(job.max_disk_write)
-    disk_read = size_to_gb(job.max_disk_read)
-
-    (
-        cpu_hours,
-        user_cpu_hours,
-        system_cpu_hours,
-        total_cpu_hours,
-        cpu_usage,
-    ) = calculate_cpu_usage(job)
-
-    start_date = job.start.split("T")[0]
-
-    if csv_mode:
-        output = io.StringIO()
-        writer = csv.writer(output)
-
-        writer.writerow(
-            [
-                job.user,
-                job.job_id,
-                job.job_name,
-                start_date,
-                job.elapsed,
-                mem_used,
-                mem_asked,
-                job.n_nodes,
-                job.n_cpus,
-                cpu_hours,
-                cpu_usage,
-                round(system_cpu_hours, 2),
-                round(user_cpu_hours, 2),
-                disk_write,
-                disk_read,
-                job.partition,
-                job.node_list.replace(",", "|"),
-                job.state,
-            ]
+        return ",".join(
+            escape_csv(value)
+            for value in values
         )
 
-        return output.getvalue().rstrip("\n")
-
     return (
-        "{:>10.10}"
-        "{:>10.10}"
-        "{:>12.10}"
-        "{:>12.10}"
-        "{:>12.10}"
-        "{:>10.8}"
-        "{:>9.8}"
-        "{:>8.6}"
-        "{:>7.5}"
-        "{:>12.11}"
-        "{:>10.8}"
-        "{:>9.7}"
-        "{:>11.9}"
-        "{:>11.9}"
-        "{:>11.9}"
-        "{:^20.18}"
-        "{:^14.13}"
-        "{:^8.6}"
+        "{:>10} {:>10} {:>12.12} {:>12} {:>12} "
+        "{:>10.2f} {:>10} {:>8} {:>7} {:>12.2f} "
+        "{:>10.3f} {:>10.2f} {:>10.2f} {:>11} {:>11} "
+        "{:^16.16} {:^14.14} {:^8}"
     ).format(
-        job.user,
-        job.job_id,
-        job.job_name,
-        start_date,
-        job.elapsed,
-        str(mem_used) + "G",
-        human_size(job.req_mem),
-        job.n_nodes,
-        job.n_cpus,
-        str(cpu_hours) + "h",
-        cpu_usage,
-        str(round(system_cpu_hours, 2)) + "h",
-        str(round(user_cpu_hours, 2)) + "h",
-        human_size("{}G".format(disk_write)),
-        human_size("{}G".format(disk_read)),
-        job.partition,
-        "  " + job.node_list,
-        "  " + job.state,
+        job["user"],
+        job["job_id"],
+        job["job_name"],
+        job["start"].split("T")[0],
+        job["elapsed"],
+        job["max_rss"],
+        human_size(job["req_mem"]),
+        job["nnodes"],
+        job["ncpus"],
+        metrics["cpu_hours"],
+        metrics["cpu_usage"],
+        metrics["system_cpu_hours"],
+        metrics["user_cpu_hours"],
+        human_size(
+            "{}G".format(job["max_disk_write"])
+        ),
+        human_size(
+            "{}G".format(job["max_disk_read"])
+        ),
+        job["partition"],
+        job["nodelist"],
+        job["state"],
     )
 
 
-def build_reports(
-    jobs,
-    max_jobs=10,
-    csv=False,
-    random_module=random,
-):
+def build_job_report(records, max_jobs=10, csv=False):
     """
-    Build a report for each user.
+    Build a report for all users.
 
-    Normal mode:
-        Randomly select up to max_jobs.
+    Returns:
 
-    CSV mode:
-        Include all reportable jobs.
+        {
+            username: report_text
+        }
     """
-
-    jobs_by_user = {}
-
-    for job in jobs:
-        if job.user not in jobs_by_user:
-            jobs_by_user[job.user] = []
-
-        jobs_by_user[job.user].append(job)
-
     reports = {}
 
-    for user, user_jobs in jobs_by_user.items():
-
-        reportable_jobs = [
-            job
-            for job in user_jobs
-            if not is_ignored_job(job)
-        ]
+    for user in sorted(records):
+        selected = select_jobs_for_user(
+            records[user],
+            max_jobs,
+        )
 
         if csv:
-            selected_jobs = reportable_jobs
+            lines = [job_header(csv=True)]
+        else:
+            lines = [job_header(csv=False)]
 
-        elif len(reportable_jobs) > max_jobs:
-            selected_jobs = random_module.sample(
-                reportable_jobs,
-                max_jobs,
+        for job in selected:
+            lines.append(
+                format_job(
+                    job,
+                    csv=csv,
+                )
             )
 
-        else:
-            selected_jobs = reportable_jobs
-
-        if csv:
-            lines = [
-                format_header(csv_mode=True)
-            ]
-
-            for job in selected_jobs:
-                lines.append(
-                    format_job(
-                        job,
-                        csv_mode=True,
-                    )
-                )
-
-        else:
-            lines = [
-                format_header(csv_mode=False),
-                "",
-            ]
-
-            for job in selected_jobs:
-                lines.append(
-                    format_job(job)
-                )
-
-        job_info = "\n".join(lines).rstrip()
-
-        reports[user] = Report(
-            user=user,
-            email_address=get_user_email(user),
-            job_info=job_info,
-            num_report=len(selected_jobs),
-            total_jobs=len(user_jobs),
-            reportable_jobs=len(reportable_jobs),
-        )
+        reports[user] = "\n".join(lines)
 
     return reports
 

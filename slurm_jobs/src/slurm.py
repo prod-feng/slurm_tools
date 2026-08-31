@@ -1,193 +1,282 @@
+import os
 import subprocess
 
 
-SACCT_FORMAT = (
-    "User,"
-    "JobID,"
-    "Account,"
-    "Partition,"
-    "State,"
-    "Start,"
-    "Elapsed,"
-    "MaxRSS,"
-    "MaxVMSize,"
-    "NNodes,"
-    "NCPUS,"
-    "NodeList,"
-    "CPUTime,"
-    "SystemCPU,"
-    "TotalCPU,"
-    "UserCPU,"
-    "ReqMem,"
-    "MaxDiskWrite,"
-    "MaxDiskRead,"
-    "JobName"
-)
+class SlurmError(RuntimeError):
+    """Raised when a Slurm command fails."""
 
 
-class SlurmJob:
-    """Container for information about one Slurm job."""
+class SlurmClient(object):
+    """
+    Common interface to Slurm commands.
 
-    def __init__(
-        self,
-        user,
-        job_id,
-        account,
-        partition,
-        state,
-        start,
-        elapsed,
-        max_rss,
-        max_vm_size,
-        n_nodes,
-        n_cpus,
-        node_list,
-        cpu_time,
-        system_cpu,
-        total_cpu,
-        user_cpu,
-        req_mem,
-        max_disk_write,
-        max_disk_read,
-        job_name,
-    ):
-        self.user = user
-        self.job_id = job_id
-        self.account = account
-        self.partition = partition
-        self.state = state
-        self.start = start
-        self.elapsed = elapsed
-        self.max_rss = max_rss
-        self.max_vm_size = max_vm_size
-        self.n_nodes = n_nodes
-        self.n_cpus = n_cpus
-        self.node_list = node_list
-        self.cpu_time = cpu_time
-        self.system_cpu = system_cpu
-        self.total_cpu = total_cpu
-        self.user_cpu = user_cpu
-        self.req_mem = req_mem
-        self.max_disk_write = max_disk_write
-        self.max_disk_read = max_disk_read
-        self.job_name = job_name
+    Keeping Slurm command execution here means jobs.py and nodes.py
+    do not need to know how Slurm is installed or how subprocesses
+    are executed.
+    """
 
+    def __init__(self, config):
+        self.config = config
 
-def build_sacct_command(
-    user,
-    all_users,
-    jobs,
-    start_time,
-    end_time,
-    state,
-    all_states,
-):
-    """Build a safe sacct command."""
+        slurm_bin_dir = config.get(
+            "cluster",
+            "slurm_bin_dir",
+            fallback="",
+        ).strip()
 
-    command = [
-        "sacct",
-        "-n",
-        "-P",
-        "--starttime={}".format(start_time),
-        "--endtime={}".format(end_time),
-        "--format={}".format(SACCT_FORMAT),
-    ]
+        if slurm_bin_dir:
+            slurm_bin_dir = os.path.expandvars(
+                os.path.expanduser(slurm_bin_dir)
+            )
 
-    if all_users:
-        command.append("-a")
+        self.slurm_bin_dir = slurm_bin_dir
 
-    elif jobs:
-        command.extend(["-j", jobs])
+    def command_path(self, command):
+        """
+        Return the full path to a Slurm command if a command directory
+        is configured; otherwise return the command name.
+        """
+        if self.slurm_bin_dir:
+            return os.path.join(
+                self.slurm_bin_dir,
+                command,
+            )
 
-    elif user:
-        command.extend(["-u", user])
+        return command
 
-    if not all_states and state:
-        command.extend(["-s", state])
+    def run(self, command, args=None):
+        """
+        Run a Slurm command safely without a shell.
+        """
+        if args is None:
+            args = []
 
-    return command
+        cmd = [self.command_path(command)]
+        cmd.extend(str(arg) for arg in args)
 
-
-def get_jobs(
-    user,
-    all_users,
-    jobs,
-    start_time,
-    end_time,
-    state,
-    all_states,
-):
-    """Run sacct and return parsed Slurm jobs."""
-
-    command = build_sacct_command(
-        user=user,
-        all_users=all_users,
-        jobs=jobs,
-        start_time=start_time,
-        end_time=end_time,
-        state=state,
-        all_states=all_states,
-    )
-
-    result = subprocess.run(
-        command,
-        check=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        universal_newlines=True,
-    )
-
-    return parse_sacct_output(result.stdout)
-
-
-def parse_sacct_output(output):
-    """Parse pipe-delimited sacct output."""
-
-    jobs = []
-
-    for line_number, line in enumerate(
-        output.splitlines(),
-        start=1,
-    ):
-        if not line.strip():
-            continue
-
-        fields = line.split("|", 19)
-
-        if len(fields) != 20:
-            raise ValueError(
-                "Unexpected sacct output on line {}: "
-                "expected 20 fields, got {}".format(
-                    line_number,
-                    len(fields),
+        try:
+            result = subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                universal_newlines=True,
+                check=False,
+            )
+        except OSError as exc:
+            raise SlurmError(
+                "Unable to execute '{}': {}".format(
+                    " ".join(cmd),
+                    exc,
                 )
             )
 
-        job = SlurmJob(
-            user=fields[0],
-            job_id=fields[1],
-            account=fields[2],
-            partition=fields[3],
-            state=fields[4],
-            start=fields[5],
-            elapsed=fields[6],
-            max_rss=fields[7],
-            max_vm_size=fields[8],
-            n_nodes=fields[9],
-            n_cpus=fields[10],
-            node_list=fields[11],
-            cpu_time=fields[12],
-            system_cpu=fields[13],
-            total_cpu=fields[14],
-            user_cpu=fields[15],
-            req_mem=fields[16],
-            max_disk_write=fields[17],
-            max_disk_read=fields[18],
-            job_name=fields[19],
+        if result.returncode != 0:
+            raise SlurmError(
+                "Slurm command failed (exit {}): {}\n{}".format(
+                    result.returncode,
+                    " ".join(cmd),
+                    result.stderr.strip(),
+                )
+            )
+
+        return result.stdout
+
+    def sacct_jobs(
+        self,
+        user=None,
+        all_users=False,
+        jobs=None,
+        start=None,
+        end=None,
+        state=None,
+    ):
+        """
+        Query completed/historical jobs through sacct.
+        """
+
+        fields = [
+            "User",
+            "JobID",
+            "JobName",
+            "Partition",
+            "State",
+            "Start",
+            "Elapsed",
+            "MaxRSS",
+            "MaxVMSize",
+            "NNodes",
+            "NCPUS",
+            "NodeList",
+            "CPUTime",
+            "SystemCPU",
+            "TotalCPU",
+            "UserCPU",
+            "ReqMem",
+            "MaxDiskWrite",
+            "MaxDiskRead",
+        ]
+
+        args = [
+            "-n",
+            "-P",
+            "--format={}".format(",".join(fields)),
+        ]
+
+        if user:
+            args.extend(["-u", user])
+        elif all_users:
+            args.append("-a")
+
+        if jobs:
+            args.extend(["-j", jobs])
+
+        if start:
+            args.extend(["-S", start])
+
+        if end:
+            args.extend(["-E", end])
+
+        if state:
+            args.extend(["-s", state])
+
+        return self.run("sacct", args)
+
+    def sinfo_nodes(self):
+        """
+        Return node information from sinfo.
+
+        Delimiter is | to make parsing robust.
+        """
+        fields = [
+            "%N",
+            "%O",
+            "%c",
+            "%m",
+            "%e",
+            "%a",
+            "%t",
+            "%E",
+            "%G",
+        ]
+
+        args = [
+            "-a",
+            "--Node",
+            "-o",
+            "|".join(fields),
+        ]
+
+        return self.run("sinfo", args)
+
+    def squeue_node(self, node):
+        """
+        Return running jobs associated with a node.
+        """
+        fields = [
+            "%i",
+            "%P",
+            "%j",
+            "%u",
+            "%M",
+            "%l",
+            "%C",
+            "%D",
+            "%R",
+        ]
+
+        args = [
+            "-t",
+            "R",
+            "-h",
+            "-w",
+            node,
+            "-o",
+            "|".join(fields),
+        ]
+
+        return self.run("squeue", args)
+
+    def scontrol_job(self, job_id):
+        """
+        Return detailed information for a job.
+        """
+        return self.run(
+            "scontrol",
+            ["show", "job", str(job_id)],
         )
 
-        if job.user:
-            jobs.append(job)
+    def job_batch_flag(self, job_id):
+        """
+        Return BatchFlag from scontrol.
 
-    return jobs
+        BatchFlag >= 1 normally indicates a batch job.
+        """
+        output = self.scontrol_job(job_id)
+
+        for token in output.split():
+            if token.startswith("BatchFlag="):
+                try:
+                    return int(token.split("=", 1)[1])
+                except ValueError:
+                    return 0
+
+        return 0
+
+    def job_mail_user(self, job_id):
+        """
+        Return MailUser from scontrol if configured.
+        """
+        output = self.scontrol_job(job_id)
+
+        for token in output.split():
+            if token.startswith("MailUser="):
+                return token.split("=", 1)[1].strip()
+
+        return ""
+
+    def passwd_email(self, username):
+        """
+        Try to determine a user's email address from getent.
+
+        This uses getent directly instead of a shell pipeline.
+        """
+        try:
+            result = subprocess.run(
+                [
+                    "getent",
+                    "passwd",
+                    username,
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                universal_newlines=True,
+                check=False,
+            )
+        except OSError:
+            return ""
+
+        if result.returncode != 0:
+            return ""
+
+        line = result.stdout.strip()
+
+        if not line:
+            return ""
+
+        # This preserves the behavior of the original script:
+        # inspect the GECOS field for an email-looking address.
+        fields = line.split(":")
+
+        if len(fields) < 5:
+            return ""
+
+        gecos = fields[4]
+
+        for part in gecos.split(","):
+            part = part.strip()
+
+            if "@" in part and " " not in part:
+                return part
+
+        return ""
 

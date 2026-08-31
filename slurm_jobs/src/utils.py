@@ -1,80 +1,112 @@
+import configparser
+import os
 import re
-from typing import Union
+from datetime import datetime, timedelta
 
 
-Number = Union[int, float]
-
-
-def time_to_seconds(value: str) -> int:
+def project_root():
     """
-    Convert Slurm elapsed/CPU time to seconds.
-
-    Supported formats include:
-
-        SS
-        MM:SS
-        HH:MM:SS
-        D-HH:MM:SS
-        D-HH:MM
-
-    Fractional seconds are ignored.
+    Return the root directory of the slurm_report project.
     """
-
-    if not value:
-        return 0
-
-    value = value.strip().split(".", 1)[0]
-
-    if "-" in value:
-        days_text, time_text = value.split("-", 1)
-        days = int(days_text)
-    else:
-        days = 0
-        time_text = value
-
-    parts = [int(x) for x in time_text.split(":")]
-
-    if len(parts) == 1:
-        hours = 0
-        minutes = 0
-        seconds = parts[0]
-
-    elif len(parts) == 2:
-        hours = 0
-        minutes, seconds = parts
-
-    elif len(parts) == 3:
-        hours, minutes, seconds = parts
-
-    else:
-        raise ValueError(f"Invalid time value: {value}")
-
-    return (
-        days * 86400
-        + hours * 3600
-        + minutes * 60
-        + seconds
+    return os.path.dirname(
+        os.path.dirname(os.path.abspath(__file__))
     )
 
 
-def time_to_hours(value: str) -> float:
-    """Convert a Slurm time value to hours."""
-
-    return time_to_seconds(value) / 3600.0
-
-
-def size_to_bytes(value: str) -> float:
+def load_config(config_path=None):
     """
-    Convert a Slurm size value to bytes.
+    Load the application configuration.
 
-    Slurm memory/disk values commonly use:
-        K, M, G, T, P
-
-    Binary multipliers are used because Slurm's
-    memory values are traditionally expressed using
-    powers of 1024.
+    If config_path is not specified, use slurm_report.conf
+    from the project root.
     """
+    if config_path is None:
+        config_path = os.path.join(
+            project_root(),
+            "slurm_report.conf",
+        )
 
+    if not os.path.isfile(config_path):
+        raise RuntimeError(
+            "Configuration file not found: {}".format(config_path)
+        )
+
+    config = configparser.ConfigParser()
+    config.read(config_path)
+
+    return config
+
+
+def get_config_path(config, section, option, fallback=""):
+    """
+    Return a configuration value and expand environment variables.
+    """
+    value = config.get(
+        section,
+        option,
+        fallback=fallback,
+    )
+
+    return os.path.expandvars(os.path.expanduser(value.strip()))
+
+
+def get_config_list(config, section, option, fallback=""):
+    """
+    Return a comma-separated configuration value as a list.
+    """
+    value = get_config_path(
+        config,
+        section,
+        option,
+        fallback,
+    )
+
+    if not value:
+        return []
+
+    return [
+        item.strip()
+        for item in value.split(",")
+        if item.strip()
+    ]
+
+
+def default_start_time(days=1):
+    """
+    Return an ISO timestamp representing N days ago.
+    """
+    return (
+        datetime.now() - timedelta(days=days)
+    ).isoformat(
+        sep="T",
+        timespec="seconds",
+    )
+
+
+def default_end_time():
+    """
+    Return the current local time in ISO format.
+    """
+    return datetime.now().isoformat(
+        sep="T",
+        timespec="seconds",
+    )
+
+
+def parse_slurm_time(value):
+    """
+    Convert common Slurm elapsed-time formats to seconds.
+
+    Supported examples:
+
+        00:00:08
+        01:02:03
+        1-05:11:54
+        05:11
+        3600
+
+    Empty or invalid values return 0.
+    """
     if value is None:
         return 0.0
 
@@ -83,18 +115,90 @@ def size_to_bytes(value: str) -> float:
     if not value:
         return 0.0
 
-    # Remove trailing "N/A" or similar values.
-    if value.upper() in {"N/A", "NA", "NONE", "-"}:
+    value = value.split(".")[0]
+
+    try:
+        if "-" in value:
+            days, time_part = value.split("-", 1)
+            days = int(days)
+        else:
+            days = 0
+            time_part = value
+
+        parts = time_part.split(":")
+
+        if len(parts) == 3:
+            hours = int(parts[0])
+            minutes = int(parts[1])
+            seconds = int(parts[2])
+
+        elif len(parts) == 2:
+            hours = 0
+            minutes = int(parts[0])
+            seconds = int(parts[1])
+
+        elif len(parts) == 1:
+            hours = 0
+            minutes = 0
+            seconds = int(parts[0])
+
+        else:
+            return 0.0
+
+        return (
+            days * 86400
+            + hours * 3600
+            + minutes * 60
+            + seconds
+        )
+
+    except (ValueError, TypeError):
         return 0.0
 
-    match = re.fullmatch(
-        r"([0-9]+(?:\.[0-9]+)?)\s*([KMGTPE]?)",
+
+def time2hours(value):
+    """
+    Convert a Slurm elapsed time to hours.
+    """
+    return parse_slurm_time(value) / 3600.0
+
+
+def parse_size_to_bytes(value):
+    """
+    Convert a Slurm size string to bytes.
+
+    Examples:
+
+        100K
+        1.5M
+        10G
+        2T
+        1000000
+
+    Slurm memory/storage values are commonly binary-oriented,
+    so powers of 1024 are used here.
+    """
+    if value is None:
+        return 0.0
+
+    value = str(value).strip()
+
+    if not value:
+        return 0.0
+
+    value = value.replace(" ", "")
+
+    match = re.match(
+        r"^([0-9]+(?:\.[0-9]+)?)\s*([KMGTPE]?)i?B?$",
         value,
         re.IGNORECASE,
     )
 
     if not match:
-        raise ValueError(f"Invalid size value: {value}")
+        try:
+            return float(value)
+        except ValueError:
+            return 0.0
 
     number = float(match.group(1))
     unit = match.group(2).upper()
@@ -102,93 +206,117 @@ def size_to_bytes(value: str) -> float:
     multipliers = {
         "": 1,
         "K": 1024,
-        "M": 1024**2,
-        "G": 1024**3,
-        "T": 1024**4,
-        "P": 1024**5,
+        "M": 1024 ** 2,
+        "G": 1024 ** 3,
+        "T": 1024 ** 4,
+        "P": 1024 ** 5,
+        "E": 1024 ** 6,
     }
 
     return number * multipliers[unit]
 
 
-def size_to_gb(value: str) -> float:
-    """Convert a size value to GB."""
-
-    return size_to_bytes(value) / (1024**3)
-
-
-def size_to_kb(value: str) -> float:
-    """Convert a size value to KB."""
-
-    return size_to_bytes(value) / 1024
-
-
-def human_size(
-    value: Union[str, Number],
-    decimal_places: int = 1,
-) -> str:
+def size2GB(value):
     """
-    Return a human-readable size.
+    Convert a size to GB.
 
-    Examples:
-        1024       -> 1.0K
-        1048576    -> 1.0M
-        1073741824 -> 1.0G
-
-    A string such as "1.5G" is also accepted.
+    Uses binary units internally.
     """
+    return parse_size_to_bytes(value) / float(1024 ** 3)
 
-    if isinstance(value, str):
-        value = value.strip()
 
-        match = re.fullmatch(
-            r"([0-9]+(?:\.[0-9]+)?)\s*([KMGTPE]?)",
-            value,
-            re.IGNORECASE,
-        )
+def size2KB(value):
+    """
+    Convert a size to KB.
+    """
+    return parse_size_to_bytes(value) / float(1024)
 
-        if not match:
-            raise ValueError(f"Invalid size value: {value}")
 
-        number = float(match.group(1))
-        unit = match.group(2).upper()
-
-        unit_multipliers = {
-            "": 1,
-            "K": 1024,
-            "M": 1024**2,
-            "G": 1024**3,
-            "T": 1024**4,
-            "P": 1024**5,
-        }
-
-        bytes_value = number * unit_multipliers[unit]
-
-    else:
-        bytes_value = float(value)
+def human_bytes(value, decimal_places=1):
+    """
+    Convert bytes to a human-readable value.
+    """
+    try:
+        value = float(value)
+    except (ValueError, TypeError):
+        return "0B"
 
     units = ["B", "K", "M", "G", "T", "P"]
 
-    size = bytes_value
-    unit_index = 0
+    for unit in units:
+        if abs(value) < 1024.0 or unit == units[-1]:
+            return "{:.{}f}{}".format(
+                value,
+                decimal_places,
+                unit,
+            )
 
-    while size >= 1024.0 and unit_index < len(units) - 1:
-        size /= 1024.0
-        unit_index += 1
+        value /= 1024.0
 
-    unit = units[unit_index]
+    return "{:.{}f}P".format(
+        value,
+        decimal_places,
+    )
 
-    return f"{size:.{decimal_places}f}{unit}"
+
+def human_size(value, decimal_places=1):
+    """
+    Convert a Slurm size string into human-readable format.
+
+    Examples:
+
+        1000K -> 1000.0K
+        2G    -> 2.0G
+        1024M -> 1.0G
+    """
+    return human_bytes(
+        parse_size_to_bytes(value),
+        decimal_places,
+    )
 
 
-def safe_float(value: str, default: float = 0.0) -> float:
-    """Safely convert a value to float."""
-
-    if value is None or not str(value).strip():
-        return default
-
+def safe_float(value, default=0.0):
+    """
+    Convert a value to float safely.
+    """
     try:
         return float(value)
-    except (TypeError, ValueError):
+    except (ValueError, TypeError):
         return default
+
+
+def safe_int(value, default=0):
+    """
+    Convert a value to int safely.
+    """
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        return default
+
+
+def contains_any(value, patterns):
+    """
+    Return True if any pattern occurs in value.
+    """
+    value = str(value).lower()
+
+    for pattern in patterns:
+        if pattern.lower() in value:
+            return True
+
+    return False
+
+
+def escape_csv(value):
+    """
+    Escape a value for simple CSV output.
+    """
+    value = "" if value is None else str(value)
+
+    if any(char in value for char in [",", '"', "\n"]):
+        value = value.replace('"', '""')
+        return '"{}"'.format(value)
+
+    return value
 

@@ -1,0 +1,179 @@
+#!/usr/bin/env python3
+
+import argparse
+import os
+import sys
+
+from src.jobs import run_job_report
+from src.nodes import run_node_report
+from src.utils import load_config
+
+
+def build_parser():
+    parser = argparse.ArgumentParser(
+        prog="slurm_report",
+        description="Slurm job and node performance reporting tool.",
+    )
+
+    parser.add_argument(
+        "--config",
+        default=None,
+        help="Path to configuration file "
+             "(default: slurm_report.conf in the project directory).",
+    )
+
+    subparsers = parser.add_subparsers(
+        dest="command",
+        title="commands",
+        description="Available report types",
+    )
+
+    # ------------------------------------------------------------------
+    # jobs
+    # ------------------------------------------------------------------
+    jobs_parser = subparsers.add_parser(
+        "jobs",
+        help="Generate Slurm job performance reports.",
+    )
+
+    jobs_group = jobs_parser.add_mutually_exclusive_group()
+
+    jobs_group.add_argument(
+        "-u",
+        "--user",
+        help="Comma-separated list of usernames.",
+    )
+
+    jobs_group.add_argument(
+        "--allusers",
+        action="store_true",
+        help="Include jobs from all users.",
+    )
+
+    jobs_group.add_argument(
+        "-j",
+        "--jobs",
+        help="Job ID, job.step, or comma-separated list of jobs.",
+    )
+
+    jobs_parser.add_argument(
+        "-S",
+        "--starttime",
+        help="Start time: YYYY-MM-DD[THH:MM[:SS]].",
+    )
+
+    jobs_parser.add_argument(
+        "-E",
+        "--endtime",
+        help="End time: YYYY-MM-DD[THH:MM[:SS]].",
+    )
+
+    jobs_parser.add_argument(
+        "-n",
+        "--njobs",
+        type=int,
+        default=10,
+        help="Maximum number of randomly selected jobs per user "
+             "(default: 10).",
+    )
+
+    jobs_parser.add_argument(
+        "-s",
+        "--state",
+        default=None,
+        help="Select a specific Slurm state, e.g. CD.",
+    )
+
+    jobs_parser.add_argument(
+        "--allstates",
+        action="store_true",
+        help="Include jobs in all states.",
+    )
+
+    jobs_parser.add_argument(
+        "--csv",
+        action="store_true",
+        help="Output job report in CSV format.",
+    )
+
+    jobs_parser.add_argument(
+        "--emailusers",
+        action="store_true",
+        help="Send job reports to users.",
+    )
+
+    # ------------------------------------------------------------------
+    # nodes
+    # ------------------------------------------------------------------
+    nodes_parser = subparsers.add_parser(
+        "nodes",
+        help="Generate Slurm node performance reports.",
+    )
+
+    nodes_filter = nodes_parser.add_mutually_exclusive_group()
+
+    nodes_filter.add_argument(
+        "--lowutil",
+        action="store_true",
+        help="Show only low-utilization nodes.",
+    )
+
+    nodes_filter.add_argument(
+        "--highutil",
+        action="store_true",
+        help="Show only high-utilization/oversubscribed nodes.",
+    )
+
+    nodes_filter.add_argument(
+        "--alerts",
+        action="store_true",
+        help="Show nodes requiring attention "
+             "(both LOW and HIGH utilization).",
+    )
+
+    nodes_parser.add_argument(
+        "--emailusers",
+        action="store_true",
+        help="Send alerts to affected users.",
+    )
+
+    nodes_parser.add_argument(
+        "--csv",
+        action="store_true",
+        help="Output node report in CSV format.",
+    )
+
+    return parser
+
+
+def main():
+    parser = build_parser()
+    args = parser.parse_args()
+
+    if not args.command:
+        parser.print_help()
+        return 1
+
+    config = load_config(args.config)
+
+    try:
+        if args.command == "jobs":
+            return run_job_report(args, config)
+
+        if args.command == "nodes":
+            return run_node_report(args, config)
+
+    except KeyboardInterrupt:
+        print("\nInterrupted.")
+        return 130
+
+    except Exception as exc:
+        print("ERROR: {}".format(exc), file=sys.stderr)
+        return 1
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+

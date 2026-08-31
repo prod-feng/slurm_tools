@@ -1,47 +1,72 @@
+<html>
 <body style="font-family: sans-serif, Arial, Helvetica;">
-<pre>
 
-Dear {user}:
+<pre style="font-family: monospace;">
 
-Here is the summary report of randomly selected {num_report} out of {total_jobs} total completed jobs on the SeaWulf Cluster in the last two weeks. Please have a review.
+Dear {user},
 
-{job_info}
+Here is the summary report of randomly selected
+{job_count} completed jobs on the HPC Cluster.
 
-Among the metrics listed above, the "CPUUsage" is very helpful for checking your jobs' performance and efficiency.
+Report period:
 
-"CPUUsage" = CPUUser/CPUhours, is the rate of your job's real usage of CPU time, divided by the total CPUhours, including idle and working time. It is a good estimate of your jobs' efficiency on the cluster.
+    Start: {start_time}
+    End:   {end_time}
 
-It should be very close to 1. Otherwise, if it is less than 1 a lot (e.g., <0.9, etc.), then it is very probably that your jobs under-utilized the resources they requested.
 
-There could be many reasons.
+{job_report}
 
-Please check your job settings, such as:
 
-- MPI job configurations
-- Ask for fewer resources (nodes, CPU cores, etc.) when appropriate
-- Submit jobs to a shared queue instead of asking for a whole node
-- Double check if you are over-running the nodes with a huge number of processes due to multiple threading
-- Check if there are heavy disk I/O operations from your jobs
+Among the metrics listed above, "CPUUsage" is very helpful
+for checking your jobs' performance and efficiency.
 
-Also, if possible, combining many small jobs into a much bigger job can greatly improve efficiency by avoiding the overhead from the OS and Slurm.
+"CPUUsage" = CPUUSER / CPUhours
 
-"CPUhours": CPU time in hours used (Elapsed time * CPU count) by your job.
+It represents the approximate rate of your job's real CPU
+usage divided by the total CPU hours allocated to the job.
 
-"CPUSYST": The CPU hours used by the operating system and related system activity. If it is high, you may need to consider checking if something is over-running the node. The smaller it is, the better.
+A CPUUsage value close to 1 generally indicates good CPU
+utilization.
 
-"CPUUSER": The CPU hours used by your job's real computation. The bigger it is, the better.
+If CPUUsage is significantly below 1, your job may be
+under-utilizing the resources requested from the cluster.
 
-"MemUsed": The maximum memory used by the job.
+There can be many reasons for low CPU utilization. Please
+consider checking the following:
 
-Due to our current setting, it sometimes can be accounted repeatedly for the same memory usage, which in turn can show a number larger than the requested memory. This often happens to multiple-threading jobs.
+  - MPI job configuration
+  - Number of requested nodes
+  - Number of requested CPU cores
+  - Whether a shared queue would be more appropriate
+  - Multithreading/process configuration
+  - Excessive process/thread oversubscription
+  - Heavy disk I/O
+  - Whether many small jobs can be combined into a larger job
 
-The rough estimate for the corrected MemUsed in this case can be obtained by:
+"CPUhours" is the total CPU time allocated to the job,
+approximately:
 
-MemUsed / nCPUs
+    Elapsed time × CPU count
 
-This issue will be fixed later when we have a chance to upgrade Slurm.
+"CPUSYST" represents CPU time used by the operating system
+and related system activity.
 
-If you have any questions, please submit a ticket through:
+"CPUUSER" represents CPU time used by the user's computation.
+
+"MemUsed" represents the maximum memory reported by Slurm.
+
+Depending on the current Slurm configuration, memory usage
+can sometimes be accounted for repeatedly for the same
+physical memory, particularly with multithreaded jobs.
+
+If this occurs, MemUsed may appear larger than the requested
+memory.
+
+A rough estimate in this situation may be obtained by:
+
+    MemUsed / nCPUs
+
+If you have any questions, please submit a support ticket:
 
 https://xxx.xxx.xxx/
 
@@ -50,5 +75,7 @@ Thanks!
 HPC Support
 
 </pre>
+
 </body>
+</html>
 
