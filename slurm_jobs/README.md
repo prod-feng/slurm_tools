@@ -1,369 +1,314 @@
-# Slurm Job Performance Report
+# Slurm Job & Node Performance Report
 
-A lightweight Python3 tool for generating CPU, memory, disk I/O, and resource-utilization reports for Slurm jobs.
+A lightweight Python 3 tool for monitoring **Slurm job and compute-node performance**.
 
-The tool uses `sacct` to collect completed-job information, calculates useful resource-utilization metrics, generates human-readable or CSV reports, and can optionally send personalized HTML email reports to users.
+The project is designed for HPC environments where administrators and users need a simple way to identify:
+
+- Jobs that are under-utilizing allocated resources
+- Compute nodes with low CPU utilization
+- Compute nodes with unusually high CPU utilization
+- Node availability and state
+- Slurm reasons for nodes being unavailable
+- Jobs currently running on individual nodes
 
 The project is intentionally organized into a few larger functional modules rather than many small files.
 
 ## Features
 
-- Query Slurm jobs using `sacct`
-- Select jobs by user, multiple users, all users, or job ID
-- Select jobs by time range
-- Select jobs by Slurm state
-- Randomly select a limited number of jobs for reports
-- Calculate CPU hours and CPU utilization
-- Calculate user CPU and system CPU time
-- Report maximum memory usage
-- Report requested memory
-- Report disk read and disk write
-- Generate human-readable reports
-- Generate CSV reports
-- Generate personalized HTML email reports
-- Configure email sender, CC, BCC, and subject through a configuration file
-- Customize the complete email body through an external HTML template
-- No third-party Python packages required
-- Designed for HPC/Slurm environments
-- Simple modular structure for easy maintenance and reuse
+### Job performance
+
+The `jobs` command reports resource utilization for Slurm jobs.
+
+It can be used to identify jobs that are:
+
+- Under-utilizing CPUs
+- Under-utilizing memory
+- Generating high or unusual disk I/O
+- Using resources inefficiently
+
+Example:
+
+```text
+./slurm_report jobs
+```
+
+### Node performance
+
+The `nodes` command provides an overview of compute-node performance.
+
+Example:
+
+```text
+./slurm_report nodes
+```
+
+The node overview includes:
+
+- Node name
+- CPU utilization
+- Number of CPUs
+- Availability
+- Node state
+- Slurm reason
+- Running job ID
+- Partition
+- Job name
+- User
+- Elapsed time
+
+Example output:
+
+```text
+Node          Util%   CPUs AVAIL   STATE        REASON             JobID      Partition        JobName              User      Elapsed
+------------------------------------------------------------------------------------------------------------------------------------
+xm094           3.1     96 up      allocated    None               2137608    medium-96core    Regge1_lambdaPi_     feng      9:47:53
+xm095          87.4     96 up      allocated    None               2137612    medium-96core    SomeJob              user1     4:12:10
+xm096         123.8     96 up      allocated    None               2137615    medium-96core    AnotherJob           user2     6:31:22
+```
+
+## Node Alert Mode
+
+The node command also supports an alert mode.
+
+By default, nodes are considered to require attention when:
+
+- CPU utilization is below 10%
+- CPU utilization is above 110%
+
+Run:
+
+```text
+./slurm_report nodes alert
+```
+
+This is useful for quickly finding:
+
+- Under-performing nodes
+- Potentially over-subscribed nodes
+- Nodes where CPU load is unexpectedly high
+
+The thresholds can be changed in the configuration file.
+
+## Command Structure
+
+The command-line interface is intentionally simple:
+
+```text
+./slurm_report jobs
+./slurm_report nodes
+```
+
+The first argument selects the type of report.
+
+### Job report
+
+```text
+./slurm_report jobs
+```
+
+### Node overview
+
+```text
+./slurm_report nodes
+```
+
+### Node alerts
+
+```text
+./slurm_report nodes alert
+```
+
+This structure makes it easy to add additional report types in the future, for example:
+
+```text
+./slurm_report jobs
+./slurm_report nodes
+./slurm_report partitions
+./slurm_report users
+```
 
 ## Project Structure
 
+The project uses a small number of larger functional modules:
+
 ```text
 slurm-job-report/
-├── slurm_job-report.py
-├── job_report.conf
+├── slurm_report
+├── slurm_report.conf
 ├── job_report.html
-│
 └── src/
     ├── __init__.py
-    ├── slurm.py
+    ├── jobs.py
+    ├── nodes.py
     ├── report.py
+    ├── slurm.py
     ├── utils.py
     └── emailer.py
 ```
 
-## Requirements
+### `slurm_report`
 
-- Python 3
-- Slurm `sacct`
-- System `mail` command for email functionality
+The main executable command.
 
-No third-party Python packages are required.
-
-Check Python:
-
-```bash
-python3 --version
-```
-
-Check Slurm:
-
-```bash
-which sacct
-```
-
-Check the mail command:
-
-```bash
-which mail
-```
-
-## Installation
-
-Clone the repository:
-
-```bash
-git clone <repository-url>
-cd slurm-job-report
-```
-
-Make the main program executable:
-
-```bash
-chmod +x slurm_job-report.py
-```
-
-Run the program:
-
-```bash
-./slurm_job-report.py
-```
-
-Or:
-
-```bash
-python3 slurm_job-report.py
-```
-
-## Usage
-
-### Command Syntax
+Examples:
 
 ```text
-./slurm_job-report.py [OPTIONS]
+./slurm_report jobs
+./slurm_report nodes
+./slurm_report nodes alert
 ```
 
-### Command-Line Options
+### `src/slurm.py`
 
-| Option | Description |
-|---|---|
-| `-u`, `--user USER` | Use a comma-separated list of UIDs or usernames |
-| `--allusers` | Display all users' jobs |
-| `-j`, `--jobs JOBS` | Display specified job or job-step IDs |
-| `-S`, `--starttime STARTTIME` | Select jobs after the specified time |
-| `-E`, `--endtime ENDTIME` | Select jobs before the specified time |
-| `-n`, `--njobs NJOBS` | Number of randomly selected jobs |
-| `-s`, `--state STATE` | Select jobs in a specific Slurm state |
-| `--allstates` | Display jobs in all states |
-| `--csv` | Generate CSV output |
-| `--emailusers` | Send email reports to users |
+Contains common Slurm-related functionality.
 
-## Usage Examples
+This module provides the interface used by the report modules to interact with Slurm.
 
-### Report Your Own Completed Jobs
+### `src/jobs.py`
 
-```bash
-./slurm_job-report.py
+Contains job-performance reporting functionality.
+
+It is responsible for collecting and processing job resource information.
+
+### `src/nodes.py`
+
+Contains node-performance reporting functionality.
+
+It provides:
+
+- Node overview
+- Node alert detection
+- CPU utilization calculation
+- Node state information
+- Node availability
+- Node reason
+- Running-job information
+
+The node implementation is optimized to avoid running a Slurm command separately for every node.
+
+### `src/report.py`
+
+Contains report-generation functionality shared by the application.
+
+### `src/utils.py`
+
+Contains common utility functions such as configuration loading and other reusable helpers.
+
+### `src/emailer.py`
+
+Contains email functionality.
+
+Email handling is kept separate from report-generation code so that email settings and delivery logic can be changed without modifying the reporting modules.
+
+### `job_report.html`
+
+HTML email template used for job reports.
+
+The email body can be changed independently of the Python code.
+
+### `slurm_report.conf`
+
+Application configuration file.
+
+It contains configurable settings such as:
+
+- Node alert thresholds
+- Email settings
+- Sender address
+- CC addresses
+- BCC addresses
+- Email subject
+- Other application settings
+
+## Configuration
+
+The application uses a text-based configuration file:
+
+```text
+slurm_report.conf
 ```
 
-By default, the program uses the current user and selects completed jobs.
+A typical configuration may look like:
 
-### Report Jobs for a Specific User
+```ini
+[nodes]
+low_threshold = 10
+high_threshold = 110
 
-```bash
-./slurm_job-report.py --user jsmith
+[email]
+sender = admin@example.com
+cc =
+bcc =
+subject = Slurm Job Performance Report
 ```
 
-Or:
+### Node thresholds
 
-```bash
-./slurm_job-report.py -u jsmith
+The node alert thresholds are configurable.
+
+```ini
+[nodes]
+low_threshold = 10
+high_threshold = 110
 ```
 
-### Report Jobs for Multiple Users
+For example:
 
-```bash
-./slurm_job-report.py --user jsmith,adoe,bsmith
+```text
+./slurm_report nodes alert
 ```
 
-### Report Jobs for All Users
+will report nodes with:
 
-```bash
-./slurm_job-report.py --allusers
+```text
+Utilization < 10%
 ```
 
-### Report a Specific Job
+or:
 
-```bash
-./slurm_job-report.py --jobs 123456
+```text
+Utilization > 110%
 ```
 
-Or:
+If the thresholds are changed to:
 
-```bash
-./slurm_job-report.py -j 123456
+```ini
+[nodes]
+low_threshold = 20
+high_threshold = 100
 ```
 
-### Report Multiple Jobs
-
-```bash
-./slurm_job-report.py --jobs 123456,123457,123458
-```
-
-### Report a Specific Job Step
-
-```bash
-./slurm_job-report.py --jobs 123456.batch
-```
-
-## Time Range Examples
-
-### Specify a Start Time
-
-```bash
-./slurm_job-report.py --starttime 2026-08-01T00:00:00
-```
-
-Short form:
-
-```bash
-./slurm_job-report.py -S 2026-08-01T00:00:00
-```
-
-### Specify an End Time
-
-```bash
-./slurm_job-report.py --endtime 2026-08-30T23:59:59
-```
-
-Short form:
-
-```bash
-./slurm_job-report.py -E 2026-08-30T23:59:59
-```
-
-### Specify Both Start and End Times
-
-```bash
-./slurm_job-report.py \
-    --starttime 2026-08-01T00:00:00 \
-    --endtime 2026-08-31T23:59:59
-```
-
-## Slurm State Examples
-
-### Completed Jobs
-
-The default state is `CD`:
-
-```bash
-./slurm_job-report.py --state CD
-```
-
-### Failed Jobs
-
-```bash
-./slurm_job-report.py --state F
-```
-
-### Cancelled Jobs
-
-```bash
-./slurm_job-report.py --state CA
-```
-
-### All States
-
-```bash
-./slurm_job-report.py --allstates
-```
-
-## Number of Jobs
-
-### Report Up to 10 Random Jobs
-
-The default is up to 10 randomly selected jobs per user:
-
-```bash
-./slurm_job-report.py
-```
-
-### Report Up to 20 Random Jobs
-
-```bash
-./slurm_job-report.py --njobs 20
-```
-
-### Report Only 5 Random Jobs
-
-```bash
-./slurm_job-report.py --user jsmith --njobs 5
-```
-
-## CSV Reports
-
-### Generate a CSV Report
-
-```bash
-./slurm_job-report.py --csv
-```
-
-Save the output:
-
-```bash
-./slurm_job-report.py --user jsmith --csv > jobs.csv
-```
-
-### Generate CSV for All Users
-
-```bash
-./slurm_job-report.py --allusers --csv > all_jobs.csv
-```
-
-CSV mode reports all selected jobs rather than randomly selecting a limited number.
-
-### Generate CSV for a Time Range
-
-```bash
-./slurm_job-report.py \
-    --allusers \
-    -S 2026-08-01T00:00:00 \
-    -E 2026-08-31T23:59:59 \
-    --csv > august_jobs.csv
-```
-
-## Email Reports
-
-### Send a Report to Users
-
-```bash
-./slurm_job-report.py --emailusers
-```
-
-### Send Reports to All Users
-
-```bash
-./slurm_job-report.py --allusers --emailusers
-```
-
-Each user receives a personalized report.
-
-### Send Reports for a Specific Time Range
-
-```bash
-./slurm_job-report.py \
-    --allusers \
-    -S 2026-08-29T00:00:00 \
-    -E 2026-08-30T23:59:59 \
-    --emailusers
-```
-
-### Send Reports with 20 Jobs per User
-
-```bash
-./slurm_job-report.py \
-    --allusers \
-    --njobs 20 \
-    --emailusers
-```
+then alert mode will report nodes below 20% or above 100%.
 
 ## Email Configuration
 
-Email configuration is stored in:
+Email configuration is intentionally kept outside of the Python source code.
 
-```text
-job_report.conf
-```
+This makes it possible to change email settings without modifying `emailer.py`.
 
 Example:
 
 ```ini
 [email]
-
-sender = hpc_support@example.edu
-
+sender = admin@example.com
 cc =
-bcc = admin@example.edu
-
-subject = Summary report of your computing jobs performance
+bcc =
+subject = Slurm Node Performance Report
 ```
 
 ### Sender
 
+The sender address can be configured with:
+
 ```ini
-sender = hpc_support@example.edu
+sender = admin@example.com
 ```
 
 ### CC
 
-Multiple addresses can be separated by commas:
+Multiple CC addresses can be specified according to the configuration format used by the application.
 
-```ini
-cc = admin@example.edu, support@example.edu
-```
-
-If no CC is required:
+If no CC addresses are configured, leave the value empty:
 
 ```ini
 cc =
@@ -371,11 +316,9 @@ cc =
 
 ### BCC
 
-```ini
-bcc = manager@example.edu, audit@example.edu
-```
+BCC is also optional.
 
-If no BCC is required:
+If no BCC addresses are required:
 
 ```ini
 bcc =
@@ -383,366 +326,409 @@ bcc =
 
 ### Subject
 
-The subject can be changed without modifying Python:
+The email subject can be configured without changing Python code:
 
 ```ini
-subject = HPC Job Performance Report
+subject = Slurm Job Performance Report
 ```
 
-## Email Template
+This allows different deployments to use their own email subjects.
 
-The complete email body is stored in:
+## HTML Email Template
+
+The job report email uses an external HTML template:
 
 ```text
 job_report.html
 ```
 
-The template uses Python-style variable substitution.
+The template can contain normal HTML together with Python variable substitution.
+
+This keeps the email presentation separate from the email-sending code.
+
+For example, the Python code can supply values such as:
+
+```text
+user
+job_id
+node
+utilization
+partition
+job_name
+```
+
+while the HTML template controls how those values are displayed.
+
+This makes it easy to modify the appearance of the email without changing the reporting logic.
+
+## Python Version
+
+The project is designed to support **Python 3.6**.
+
+It intentionally does not depend on the `dataclasses` module because `dataclasses` was introduced into the Python standard library in Python 3.7.
+
+The implementation therefore uses regular Python classes and other Python 3.6-compatible features.
+
+Check the Python version:
+
+```text
+python3 --version
+```
 
 Example:
 
-```html
-<html>
-<body style="font-family: sans-serif, Arial, Helvetica;">
-
-<p>Dear {user},</p>
-
-<p>
-Here is your Slurm job performance report.
-</p>
-
-{job_info}
-
-<p>
-You had {total_jobs} completed jobs.
-</p>
-
-</body>
-</html>
+```text
+Python 3.6.x
 ```
 
-The HTML template can be modified without changing the Python code.
+## Slurm Requirements
 
-### Template Variables
+The application requires access to the standard Slurm commands used for querying jobs and nodes.
 
-| Variable | Description |
-|---|---|
-| `{user}` | Slurm username |
-| `{num_report}` | Number of jobs included in the report |
-| `{total_jobs}` | Total number of jobs found |
-| `{job_info}` | Formatted job-performance report |
-
-## Report Metrics
-
-### CPUhours
-
-CPU hours are approximately:
+The node-performance module uses:
 
 ```text
-CPUhours = Elapsed Time × CPU Count
+sinfo
+squeue
 ```
 
-For example, a job running for 2 hours using 40 CPUs consumes:
+The actual Slurm installation path can be configured through the application configuration or the implementation's Slurm path settings.
+
+The default environment used by this project is:
 
 ```text
-2 × 40 = 80 CPU hours
+/cm/shared/apps/slurm/current/bin
 ```
 
-### CPUUsage
+If your cluster uses a different installation path, update the corresponding configuration or source setting.
 
-CPU utilization is estimated as:
+## Node Performance Implementation
+
+The node report is designed to be fast even on large clusters.
+
+A naive implementation would run:
 
 ```text
-CPUUsage = UserCPU / CPUhours
+squeue
 ```
 
-A value closer to `1.0` generally indicates better utilization of allocated CPU resources.
+once for every node.
 
-A significantly lower value may indicate that the job requested more CPU resources than it actually used.
+For a cluster with hundreds or thousands of nodes, this can be very slow.
 
-Possible causes include:
-
-- Inefficient MPI configuration
-- Too many allocated CPUs
-- Insufficient parallelism
-- I/O bottlenecks
-- Threading configuration problems
-- Serial portions of the application
-
-### CPUSYST
-
-CPU time spent in system/OS activity.
-
-A relatively high value may warrant investigation into:
-
-- Heavy I/O
-- Excessive process activity
-- System-level overhead
-- Oversubscription
-- Other resource-intensive operations
-
-### CPUUSER
-
-CPU time attributed to the user's computation.
-
-Higher values generally indicate that more CPU time was spent doing application work.
-
-### MemUsed
-
-Maximum memory usage reported by Slurm.
-
-Depending on the Slurm configuration and application behavior, memory usage may occasionally be reported multiple times for multithreaded jobs.
-
-A rough estimate may sometimes be:
+Instead, the current implementation retrieves the information in two main Slurm calls:
 
 ```text
-Corrected MemUsed ≈ MemUsed / nCPUs
+1. sinfo
+2. squeue
 ```
 
-This is only an estimate.
+The Python code then joins the node and job information in memory.
 
-### MemAsked
+Conceptually:
 
-Memory requested by the job through Slurm.
+```text
+sinfo ──────────────┐
+                    ├──> Python ──> Node Report
+squeue ─────────────┘
+```
 
-Comparing `MemUsed` with `MemAsked` can help identify jobs that consistently request substantially more memory than they actually use.
+This avoids executing `squeue` separately for every node.
 
-### DiskRead and DiskWrite
+## Duplicate Nodes
 
-Reported disk I/O associated with the job.
+Some Slurm configurations can cause `sinfo` to return multiple records for the same physical node.
 
-Large values may help identify jobs that could benefit from optimization of:
+The node reporter explicitly deduplicates nodes by node name.
 
-- File access patterns
-- Temporary files
-- Parallel I/O
-- Data staging
-- Storage layout
+For example, if Slurm returns:
 
-## GPU Jobs
+```text
+xm094
+xm094
+xm094
+xm094
+```
 
-The current implementation intentionally ignores jobs running in partitions containing:
+the report will contain only:
+
+```text
+xm094
+```
+
+If multiple records for a node have different load values, the implementation keeps the record with the highest load.
+
+## Node Utilization
+
+CPU utilization is calculated using the Slurm CPU load and CPU count:
+
+```text
+Utilization = CPU Load / CPU Count × 100
+```
+
+For example, if a node has:
+
+```text
+CPU Load = 3.1
+CPUs     = 96
+```
+
+the utilization is approximately:
+
+```text
+3.1 / 96 × 100 = 3.23%
+```
+
+The report displays the numeric value without the `%` character:
+
+```text
+3.2
+```
+
+This makes the output easier to parse and process with other command-line tools.
+
+## Availability, State and Reason
+
+The node overview also displays Slurm node status information:
+
+- `AVAIL` — whether the node is available
+- `STATE` — current Slurm node state
+- `REASON` — reason reported by Slurm when applicable
+
+For example:
+
+```text
+Node          Util%   CPUs AVAIL   STATE        REASON
+xm094           3.1     96 up      allocated    None
+```
+
+Long values are truncated in the terminal output to keep the report readable.
+
+## Ignored Nodes
+
+The current implementation ignores nodes whose name contains:
 
 ```text
 a100
 ```
 
-This filtering is implemented in:
+This behavior was inherited from the original node-performance script.
+
+If GPU nodes should be included in the future, this filtering can be removed or moved into the configuration file.
+
+## Typical Usage
+
+### Check all node performance
 
 ```text
-src/report.py
+./slurm_report nodes
 ```
 
-Additional GPU partitions can be added to the filtering logic if needed.
-
-## Customization
-
-Most customization can be performed without modifying the Python source code.
-
-### Change Email Wording
-
-Edit:
+### Find under-performing or over-subscribed nodes
 
 ```text
-job_report.html
+./slurm_report nodes alert
 ```
 
-### Change Email Sender
-
-Edit:
+### Generate a job report
 
 ```text
-job_report.conf
+./slurm_report jobs
 ```
 
-### Change CC/BCC
-
-Edit:
+### Display command help
 
 ```text
-job_report.conf
+./slurm_report --help
 ```
 
-### Change Email Subject
-
-Edit:
+Depending on the command-line parser configuration, command-specific help may also be available with:
 
 ```text
-job_report.conf
+./slurm_report jobs --help
+./slurm_report nodes --help
 ```
 
-### Change Slurm Query
+## Example Workflow
 
-Modify:
+A typical HPC administrator workflow might be:
 
 ```text
-src/slurm.py
+# Check overall node performance
+./slurm_report nodes
+
+# Check only nodes that need attention
+./slurm_report nodes alert
+
+# Check job resource utilization
+./slurm_report jobs
 ```
 
-### Change Report Calculations
+The overview provides a complete picture, while alert mode provides a quick way to focus on potential problems.
 
-Modify:
+## Design Goals
+
+The project follows several simple design principles.
+
+### Keep the number of modules small
+
+Instead of splitting every function into a separate Python file, related functionality is grouped together.
+
+The major functional areas are:
 
 ```text
-src/report.py
+Slurm interaction
+Job reporting
+Node reporting
+Report generation
+Utilities
+Email
 ```
 
-### Change Unit Conversion
+### Keep email separate
 
-Modify:
+Email delivery is isolated in `emailer.py`.
+
+This allows email settings and delivery behavior to evolve independently from report-generation logic.
+
+### Keep presentation separate
+
+HTML email formatting is stored in `job_report.html`.
+
+The Python code provides the data, while the HTML template controls presentation.
+
+### Keep configuration outside the source code
+
+Operational settings such as email addresses and node thresholds belong in:
 
 ```text
-src/utils.py
+slurm_report.conf
 ```
 
-### Change Email Delivery
+This avoids changing Python source code for normal administrative configuration changes.
 
-Modify:
+### Optimize expensive Slurm operations
+
+The node report avoids running one Slurm command per node.
+
+This is especially important on large HPC clusters.
+
+## Future Extensions
+
+The command structure is intentionally designed to make additional report types easy to add.
+
+Possible future commands include:
 
 ```text
-src/emailer.py
+./slurm_report jobs
+./slurm_report nodes
+./slurm_report users
+./slurm_report partitions
+./slurm_report queues
 ```
+
+Possible future node features include:
+
+- GPU utilization
+- Memory utilization
+- Network utilization
+- Disk I/O
+- Temperature
+- More detailed node health information
+- Configurable node exclusions
+- Different alert thresholds by partition
+
+Possible future job features include:
+
+- GPU utilization
+- Memory efficiency
+- CPU efficiency
+- Job-level I/O statistics
+- Historical utilization
+- Email alerts
 
 ## Troubleshooting
 
-### `sacct: command not found`
+### `ModuleNotFoundError: No module named 'dataclasses'`
 
-Check:
+The project is designed for Python 3.6 and does not require the `dataclasses` package.
 
-```bash
-which sacct
+Make sure the current source tree does not contain:
+
+```text
+from dataclasses import dataclass
 ```
 
-If your system uses environment modules, load the appropriate Slurm module.
+Check your Python version:
+
+```text
+python3 --version
+```
+
+### `ImportError: cannot import name 'run_node_report'`
+
+Make sure `src/nodes.py` contains:
+
+```text
+def run_node_report(args, config):
+```
+
+Also make sure the main executable imports it from the correct module.
+
+### Slurm command not found
+
+Verify that the configured Slurm directory contains:
+
+```text
+sinfo
+squeue
+sacct
+scontrol
+```
 
 For example:
 
-```bash
-module load slurm
+```text
+ls /cm/shared/apps/slurm/current/bin/
 ```
 
-Then:
+If Slurm is installed somewhere else, update the corresponding configuration.
 
-```bash
-which sacct
-```
+### Node report is empty
 
-### No Jobs Found
-
-Try a broader time range:
-
-```bash
-./slurm_job-report.py \
-    -S 2026-08-01T00:00:00 \
-    -E 2026-08-30T23:59:59
-```
-
-Also check whether state filtering is the reason:
-
-```bash
-./slurm_job-report.py --allstates
-```
-
-### Email Is Not Sent
-
-Check that `mail` exists:
-
-```bash
-which mail
-```
-
-Also verify:
+Try the underlying Slurm command directly:
 
 ```text
-job_report.conf
+/cm/shared/apps/slurm/current/bin/sinfo -a --Node
 ```
 
-Check the sender, CC, BCC, and subject configuration.
-
-## Design Philosophy
-
-The project intentionally uses a small number of functional modules.
-
-The goal is to avoid both extremes.
-
-### Too Little Structure
-
-```text
-One huge Python script
-```
-
-This becomes difficult to maintain as functionality grows.
-
-### Too Much Structure
-
-```text
-Many tiny modules with one function each
-```
-
-This can make a relatively simple application unnecessarily complicated.
-
-### Current Structure
-
-Functionality is grouped according to its natural responsibility:
-
-```text
-Slurm         → src/slurm.py
-Reporting     → src/report.py
-Utilities     → src/utils.py
-Email         → src/emailer.py
-Application   → slurm_job-report.py
-Configuration → job_report.conf
-Template      → job_report.html
-```
-
-This keeps the application modular while remaining easy to understand and reuse.
-
-## Security Considerations
-
-External commands should preferably be executed using argument lists rather than constructing shell command strings from user input.
-
-Avoid:
-
-```python
-subprocess.getoutput("sacct -u " + user)
-```
-
-Prefer:
-
-```python
-subprocess.run(
-    ["sacct", "-u", user],
-    ...
-)
-```
-
-This prevents shell interpretation of user-provided values.
-
-The same principle should be applied to other external commands.
-
-## Future Improvements
-
-Potential future enhancements include:
-
-- Support for additional Slurm metrics
-- Better GPU utilization reporting
-- Configurable ignored partitions
-- Configurable fallback email address
-- Configurable report selection strategy
-- HTML tables instead of `<pre>` formatted reports
-- Optional logging to a file
-- Dry-run email mode
-- SMTP support
-- Automated scheduled reports
-- Unit tests
-- Configurable CPU-utilization thresholds
-- Highlighting jobs with particularly low CPU utilization
-- Summary statistics across all users
-- Historical report generation
-- JSON output
-- Configurable report columns
+Then verify that the account running `slurm_report` has permission to query the cluster.
 
 ## License
+
+Add the project's license information here.
+
+For example:
+
 ```text
 MIT License
+```
+
+or replace this section with the license appropriate for your organization.
+
+## Author / Maintainer
+
+Add project author or HPC support team information here.
+
+## Summary
+
+`slurm_report` provides a simple command-line interface for Slurm performance monitoring:
+
+```text
+./slurm_report jobs
+./slurm_report nodes
+./slurm_report nodes alert
+```
+
+The project emphasizes simplicity, reuse, and expandability while avoiding unnecessary fragmentation into many small modules.
 ```
