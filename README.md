@@ -39,13 +39,13 @@ The result is like:
 >gpu_job_monitor.py --dry-run
 JOBID      USER         NODE             GPUS           AVG     MIN     MAX  IDLE STATE               BAD
 ---------- ------------ ---------------- ---------- ------- ------- ------- ----- ------------------ ----
-85248      Feng      b40x4-09             0             0.0%      0%      0%     1 LOW_UTILIZATION      5
-85167      feng      b40x4-08             1             0.0%      0%      0%     1 LOW_UTILIZATION      6
-85249      Zhang     b40x4-09             1             0.0%      0%      0%     1 LOW_UTILIZATION      5
-84117      zhang     b40x4-02             0-3          94.8%     92%     97%     0 NORMAL               0
+85248      Feng      b40x4-09             0            0.0%      0%      0%     1 LOW_UTILIZATION      5
+85167      feng      b40x4-08             1            0.0%      0%      0%     1 LOW_UTILIZATION      6
+85249      Zhang     b40x4-09             1            0.0%      0%      0%     1 LOW_UTILIZATION      5
+84117      zhang     b40x4-02             0-3         94.8%     92%     97%     0 NORMAL               0
 
 ```
 
-You can ue the --dry-run mode to run it interactively, not triggering to track the jobs states.
+You can use the --dry-run mode to run it interactively, not triggering to track the jobs states.
 
 
