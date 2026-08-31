@@ -15,6 +15,8 @@ View past or running jobs' performance, and node-based performance. CPU only.
 
 It is supposed to run in CRONTAB jobs, every 10 minuets. Sampling a jobs GPU utilization,if all 6 samples are all below, say 20%, then send email to this user.
 
+It needs to SSH login yo all GPU nodes to run nvidia_smi command, so the user who want to run needs to be able to login to all nodes, like in a white list, or root.
+
 ```
 usage: gpu_job_monitor.py  [-h] [-v] [--debug] [--dry-run] [--state-file STATE_FILE] [--lock-file LOCK_FILE]
 
@@ -37,10 +39,10 @@ The result is like:
 >gpu_job_monitor.py --dry-run
 JOBID      USER         NODE             GPUS           AVG     MIN     MAX  IDLE STATE               BAD
 ---------- ------------ ---------------- ---------- ------- ------- ------- ----- ------------------ ----
-85248      Feng    b40x4-09         0             0.0%      0%      0%     1 LOW_UTILIZATION           5
-85167      feng    b40x4-08         1             0.0%      0%      0%     1 LOW_UTILIZATION           6
-85249      Zhang   b40x4-09         1             0.0%      0%      0%     1 LOW_UTILIZATION           5
-84117      zhang   b40x4-02         0-3          94.8%     92%     97%     0 NORMAL                    0
+85248      Feng      b40x4-09             0             0.0%      0%      0%     1 LOW_UTILIZATION      5
+85167      feng      b40x4-08             1             0.0%      0%      0%     1 LOW_UTILIZATION      6
+85249      Zhang     b40x4-09             1             0.0%      0%      0%     1 LOW_UTILIZATION      5
+84117      zhang     b40x4-02             0-3          94.8%     92%     97%     0 NORMAL               0
 
 ```
 
