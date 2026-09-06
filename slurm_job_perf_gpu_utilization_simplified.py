@@ -42,7 +42,7 @@ SACCTMGR = "/cm/shared/apps/slurm/current/bin/sacctmgr"
 #
 # It is NOT the job report.
 GPU_HISTORY_FILE = (
-    "/lustre/nvwulf/home/fenzhang/"
+    "/home/feng/"
     "gpuusers.csv"
 )
 
