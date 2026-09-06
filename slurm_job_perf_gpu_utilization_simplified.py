@@ -1,34 +1,52 @@
 #!/usr/bin/env python3
 """
-Slurm GPU utilization report.
+Slurm GPU utilization monitor.
 
 Python 3.6 compatible.
 
-Reports:
-  - GPU utilization for individual jobs
-  - Weighted GPU utilization per user
-  - GPU-hours used
-  - Number of GPU jobs
-  - Suggested priority factor
+Features:
+  - GPU utilization report
+  - Per-user GPU utilization summary
+  - GPU-hour weighted utilization
+  - Save last GPU activity date in CSV
+  - Reset priority to 100 for users with no GPU jobs in 14 days
+  - Optionally update Slurm priority based on GPU utilization
 
-Important:
-  - Parent sacct records are ignored for utilization.
-  - .extern records are ignored.
-  - Actual job/step records such as 88212.0 are used.
+Important Slurm behavior:
+  - Parent job records are NOT counted
+  - .extern records are NOT counted
+  - Actual job steps such as 88212.0 ARE counted
 """
 
 from __future__ import print_function
 
 import argparse
+import csv
+import os
 import random
-import re
 import subprocess
 from collections import OrderedDict
 from datetime import datetime, timedelta
 
 
+# ======================================================================
+# Configuration
+# ======================================================================
+
 SACCT = "/cm/shared/apps/slurm/current/bin/sacct"
 SACCTMGR = "/cm/shared/apps/slurm/current/bin/sacctmgr"
+
+# CSV contains only:
+#
+# user,last
+#
+# It is NOT the job report.
+GPU_HISTORY_FILE = (
+    "/lustre/nvwulf/home/fenzhang/"
+    "gpuusers.csv"
+)
+
+INACTIVE_DAYS = 14
 
 DEBUG = False
 
@@ -38,7 +56,7 @@ PARTITIONS = (
     "h200x8,h200x8-long,"
     "p-b40x4,p-b40x4-long,"
     "p-h200x4,p-h200x4-long,"
-    "p-h200x8,p-h200x8-03-long,p-h200x8-long"
+    "p-h200x8,p-h200x8-03-long"
 )
 
 SACCT_FORMAT = (
@@ -48,12 +66,13 @@ SACCT_FORMAT = (
 )
 
 
-# ----------------------------------------------------------------------
-# Conversion functions
-# ----------------------------------------------------------------------
+# ======================================================================
+# Time conversion
+# ======================================================================
 
 def time_to_hours(value):
-    """Convert Slurm time to hours."""
+    """Convert Slurm elapsed time to hours."""
+
     if not value:
         return 0.0
 
@@ -82,26 +101,25 @@ def time_to_hours(value):
     )
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 # GPU parsing
-# ----------------------------------------------------------------------
+# ======================================================================
 
 def parse_gpu_info(tres_usage, alloc_tres):
     """
-    Return:
-
-        gpu_utilization, gpu_count
+    Extract GPU utilization and GPU count.
 
     Example:
 
-        TRESUsageInAve:
-          cpu=00:52:45,...,gres/gpuutil=100,...
+      TRESUsageInAve:
+        cpu=00:52:45,...,gres/gpuutil=100,...
 
-        AllocTRES:
-          cpu=1,gres/gpu:h200=1,gres/gpu=1,...
+      AllocTRES:
+        cpu=1,gres/gpu:h200=1,gres/gpu=1,...
 
     Returns:
-        100.0, 1
+
+        (gpu_utilization, gpu_count)
     """
 
     gpu_util = None
@@ -109,9 +127,11 @@ def parse_gpu_info(tres_usage, alloc_tres):
 
     if tres_usage:
         for item in tres_usage.split(","):
+
             item = item.strip()
 
             if item.startswith("gres/gpuutil="):
+
                 try:
                     gpu_util = float(
                         item.split("=", 1)[1]
@@ -121,9 +141,11 @@ def parse_gpu_info(tres_usage, alloc_tres):
 
     if alloc_tres:
         for item in alloc_tres.split(","):
+
             item = item.strip()
 
             if item.startswith("gres/gpu="):
+
                 try:
                     gpu_count = int(
                         float(item.split("=", 1)[1])
@@ -137,18 +159,21 @@ def parse_gpu_info(tres_usage, alloc_tres):
     if gpu_count is None or gpu_count <= 0:
         gpu_count = 1
 
-    # Protect against bad Slurm data.
-    gpu_util = max(0.0, min(100.0, gpu_util))
+    # Protect against bad data.
+    gpu_util = max(
+        0.0,
+        min(100.0, gpu_util)
+    )
 
     return gpu_util, gpu_count
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 # Run sacct
-# ----------------------------------------------------------------------
+# ======================================================================
 
-def run_sacct(args):
-    """Run sacct without using a shell."""
+def run_sacct(args, starttime, endtime):
+    """Run sacct."""
 
     command = [
         SACCT,
@@ -156,28 +181,36 @@ def run_sacct(args):
         "-P",
         "-r", PARTITIONS,
         "--format=" + SACCT_FORMAT,
-        "-S", args.starttime,
-        "-E", args.endtime,
+        "-S", starttime,
+        "-E", endtime,
     ]
 
     if args.jobs:
+
         command.extend([
             "-j", args.jobs,
             "-a"
         ])
+
     elif args.allusers:
+
         command.append("-a")
+
     else:
+
         command.extend([
             "-u", args.user
         ])
 
     if not args.allstates:
+
         command.extend([
             "-s", args.state
         ])
 
     if DEBUG:
+
+        print()
         print("Running:")
         print(" ".join(command))
         print()
@@ -192,36 +225,41 @@ def run_sacct(args):
     stdout, stderr = process.communicate()
 
     if process.returncode != 0:
+
         raise RuntimeError(
-            "sacct failed: {}".format(stderr.strip())
+            "sacct failed: {}".format(
+                stderr.strip()
+            )
         )
 
     return stdout
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 # Parse sacct
-# ----------------------------------------------------------------------
+# ======================================================================
 
 def parse_sacct(output):
     """
-    Return:
+    Parse sacct output.
 
-        {
-            user: {
-                jobid: {
-                    ...
-                }
-            }
-        }
+    Parent records:
 
-    Only actual job steps are used for utilization.
+        88212
 
-    Example:
+    are metadata only.
 
-        88212          -> parent, ignored
-        88212.extern   -> ignored
-        88212.0        -> used
+    Extern records:
+
+        88212.extern
+
+    are ignored.
+
+    Actual steps:
+
+        88212.0
+
+    are used for GPU utilization.
     """
 
     jobs = OrderedDict()
@@ -239,14 +277,18 @@ def parse_sacct(output):
         values = line.split("|")
 
         if len(values) != len(fields):
+
             if DEBUG:
                 print(
                     "Skipping malformed line:",
                     line
                 )
+
             continue
 
-        data = dict(zip(fields, values))
+        data = dict(
+            zip(fields, values)
+        )
 
         user = data["USER"].strip()
         jobid = data["JobID"].strip()
@@ -254,7 +296,9 @@ def parse_sacct(output):
         # --------------------------------------------------------------
         # Parent job
         # --------------------------------------------------------------
+
         if user:
+
             current_user = user
             current_job = jobid
 
@@ -262,18 +306,19 @@ def parse_sacct(output):
                 jobs[user] = OrderedDict()
 
             if jobid not in jobs[user]:
+
                 jobs[user][jobid] = {
                     "partition": data["Partition"],
                     "state": data["State"],
                     "start": data["Start"],
                     "elapsed": 0.0,
-                    "gpu_util": 0.0,
+                    "gpu_util_hours": 0.0,
+                    "gpu_hours": 0.0,
                     "gpu_count": 0,
                     "steps": 0,
                 }
 
-            # VERY IMPORTANT:
-            # Do not use parent record for GPU utilization.
+            # DO NOT count parent record.
             continue
 
         if current_user is None:
@@ -282,143 +327,130 @@ def parse_sacct(output):
         # --------------------------------------------------------------
         # Ignore extern
         # --------------------------------------------------------------
+
         if ".extern" in jobid:
             continue
 
-        job = jobs[current_user][current_job]
+        # --------------------------------------------------------------
+        # Only actual job steps
+        # --------------------------------------------------------------
 
-        # --------------------------------------------------------------
-        # Actual job step
-        # --------------------------------------------------------------
         if "." not in jobid:
             continue
 
         if "batch" in jobid:
             continue
 
+        job = jobs[current_user][current_job]
+
         job["steps"] += 1
 
-        elapsed = time_to_hours(data["Elapsed"])
+        elapsed = time_to_hours(
+            data["Elapsed"]
+        )
 
         gpu_util, gpu_count = parse_gpu_info(
             data["TRESUsageInAve"],
             data["AllocTRES"]
         )
 
-        # Accumulate GPU-hours.
+        if gpu_count <= 0:
+            continue
+
+        gpu_hours = (
+            elapsed * gpu_count
+        )
+
         job["elapsed"] += elapsed
 
-        if gpu_count > 0:
-            job["gpu_count"] = max(
-                job["gpu_count"],
-                gpu_count
-            )
+        job["gpu_hours"] += gpu_hours
 
-            # Weighted utilization numerator.
-            job["gpu_util"] += (
-                gpu_util
-                * elapsed
-                * gpu_count
-            )
+        job["gpu_util_hours"] += (
+            gpu_util * gpu_hours
+        )
+
+        job["gpu_count"] = max(
+            job["gpu_count"],
+            gpu_count
+        )
+
+    # --------------------------------------------------------------
+    # Calculate final utilization
+    # --------------------------------------------------------------
+
+    for user in jobs:
+
+        for jobid in jobs[user]:
+
+            job = jobs[user][jobid]
+
+            if job["gpu_hours"] > 0:
+
+                job["utilization"] = (
+                    job["gpu_util_hours"]
+                    / job["gpu_hours"]
+                )
+
+            else:
+
+                job["utilization"] = 0.0
 
     return jobs
 
 
-# ----------------------------------------------------------------------
-# Finalize jobs
-# ----------------------------------------------------------------------
+# ======================================================================
+# Select GPU jobs
+# ======================================================================
 
-def finalize_job(job):
-    """
-    Convert accumulated GPU utilization into a percentage.
-    """
+def select_gpu_jobs(user_jobs):
+    """Return jobs that actually used GPUs."""
 
-    gpu_hours = (
-        job["elapsed"]
-        * job["gpu_count"]
-    )
-
-    if gpu_hours <= 0:
-        job["utilization"] = 0.0
-    else:
-        job["utilization"] = (
-            job["gpu_util"]
-            / gpu_hours
-        )
-
-    job["gpu_hours"] = gpu_hours
-
-    return job
-
-
-# ----------------------------------------------------------------------
-# Select useful jobs
-# ----------------------------------------------------------------------
-
-def select_jobs(user_jobs):
-    """
-    Remove jobs that cannot contribute to GPU utilization.
-    """
-
-    result = []
+    selected = []
 
     for jobid, job in user_jobs.items():
 
-        finalize_job(job)
-
-        # Ignore jobs without GPU information.
-        if job["gpu_count"] <= 0:
+        if job["gpu_hours"] <= 0:
             continue
 
-        # Ignore zero-length jobs.
-        if job["elapsed"] <= 0:
-            continue
-
-        # Existing special-case behavior.
+        # Preserve your old behavior of ignoring A100.
         if "a100" in job["partition"].lower():
             continue
 
-        result.append(
+        selected.append(
             (jobid, job)
         )
 
-    return result
+    return selected
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 # User summary
-# ----------------------------------------------------------------------
+# ======================================================================
 
 def summarize_user(selected_jobs):
     """
-    Calculate weighted GPU utilization.
-
-    GPU utilization is weighted by GPU-hours, not by number of jobs.
-
-        sum(utilization * GPU-hours)
-        ----------------------------
-              sum(GPU-hours)
+    GPU-hour weighted utilization.
     """
 
     total_gpu_hours = 0.0
-    utilization_gpu_hours = 0.0
+    total_util_gpu_hours = 0.0
 
     for jobid, job in selected_jobs:
 
-        gpu_hours = job["gpu_hours"]
+        total_gpu_hours += job["gpu_hours"]
 
-        total_gpu_hours += gpu_hours
-
-        utilization_gpu_hours += (
-            job["utilization"]
-            * gpu_hours
+        total_util_gpu_hours += (
+            job["gpu_util_hours"]
         )
 
     if total_gpu_hours <= 0:
+
         utilization = 0.0
+
     else:
+
         utilization = (
-            utilization_gpu_hours
+            total_util_gpu_hours
             / total_gpu_hours
         )
 
@@ -429,24 +461,25 @@ def summarize_user(selected_jobs):
     }
 
 
-# ----------------------------------------------------------------------
-# Priority
-# ----------------------------------------------------------------------
+# ======================================================================
+# Priority calculation
+# ======================================================================
 
 def priority_from_utilization(utilization):
     """
-    Convert GPU utilization into the existing 80-100
-    priority scale.
+    Map GPU utilization to priority.
 
         100% -> 100
+         95% -> 99
          90% -> 98
          80% -> 96
          50% -> 90
     """
 
-    priority = int(
-        utilization * 0.2
-    ) + 80
+    priority = (
+        int(utilization * 0.20)
+        + 80
+    )
 
     return max(
         80,
@@ -454,16 +487,14 @@ def priority_from_utilization(utilization):
     )
 
 
-# ----------------------------------------------------------------------
-# Reporting
-# ----------------------------------------------------------------------
+# ======================================================================
+# Print detailed jobs
+# ======================================================================
 
 def print_job_report(user, selected_jobs):
 
     print()
-    print(
-        "User: {}".format(user)
-    )
+    print("User: {}".format(user))
 
     print(
         "{:<12} {:>10} {:>8} {:>12} {:>10}".format(
@@ -490,15 +521,19 @@ def print_job_report(user, selected_jobs):
         )
 
 
+# ======================================================================
+# Print summary
+# ======================================================================
+
 def print_summary(summary):
 
     print()
-    print("=" * 60)
+    print("=" * 72)
     print("GPU UTILIZATION SUMMARY")
-    print("=" * 60)
+    print("=" * 72)
 
     print(
-        "{:<15} {:>8} {:>14} {:>14} {:>10}".format(
+        "{:<16} {:>8} {:>14} {:>14} {:>10}".format(
             "User",
             "Jobs",
             "GPU-hours",
@@ -507,7 +542,7 @@ def print_summary(summary):
         )
     )
 
-    print("-" * 60)
+    print("-" * 72)
 
     for user in sorted(summary):
 
@@ -518,7 +553,7 @@ def print_summary(summary):
         )
 
         print(
-            "{:<15} {:>8d} {:>14.2f} {:>13.2f}% {:>10d}".format(
+            "{:<16} {:>8d} {:>14.2f} {:>13.2f}% {:>10d}".format(
                 user,
                 item["jobs"],
                 item["gpu_hours"],
@@ -530,12 +565,199 @@ def print_summary(summary):
     print()
 
 
-# ----------------------------------------------------------------------
-# Update Slurm priorities
-# ----------------------------------------------------------------------
+# ======================================================================
+# CSV history
+# ======================================================================
+
+def load_gpu_history(filename):
+    """
+    Read:
+
+        user,last
+
+    Returns:
+
+        {
+            user: YYYY-MM-DD
+        }
+    """
+
+    history = {}
+
+    if not os.path.exists(filename):
+        return history
+
+    try:
+
+        with open(
+            filename,
+            "r",
+            newline=""
+        ) as csvfile:
+
+            reader = csv.DictReader(
+                csvfile
+            )
+
+            for row in reader:
+
+                user = row.get(
+                    "user",
+                    ""
+                ).strip()
+
+                last = row.get(
+                    "last",
+                    ""
+                ).strip()
+
+                if user:
+                    history[user] = last
+
+    except IOError as error:
+
+        print(
+            "WARNING: Cannot read {}: {}".format(
+                filename,
+                error
+            )
+        )
+
+    return history
+
+
+def save_gpu_history(filename, history):
+    """
+    Atomically write the GPU history CSV.
+    """
+
+    directory = os.path.dirname(filename)
+
+    if directory and not os.path.exists(directory):
+
+        os.makedirs(directory)
+
+    temporary = filename + ".tmp"
+
+    with open(
+        temporary,
+        "w",
+        newline=""
+    ) as csvfile:
+
+        writer = csv.DictWriter(
+            csvfile,
+            fieldnames=[
+                "user",
+                "last"
+            ]
+        )
+
+        writer.writeheader()
+
+        for user in sorted(history):
+
+            writer.writerow({
+                "user": user,
+                "last": history[user]
+            })
+
+    # Atomic replacement on the same filesystem.
+    os.rename(
+        temporary,
+        filename
+    )
+
+
+# ======================================================================
+# Update history
+# ======================================================================
+
+def update_gpu_history(history, active_users):
+
+    today = datetime.now().strftime(
+        "%Y-%m-%d"
+    )
+
+    for user in active_users:
+
+        history[user] = today
+
+
+# ======================================================================
+# Reset inactive users
+# ======================================================================
+
+def reset_inactive_users(
+    history,
+    active_users,
+    dry_run=False
+):
+    """
+    Reset priority to 100 for users that have not
+    had a GPU job in the last 14 days.
+
+    IMPORTANT:
+
+    Users currently active in the 14-day sacct query
+    are never reset.
+    """
+
+    cutoff = (
+        datetime.now()
+        - timedelta(days=INACTIVE_DAYS)
+    ).date()
+
+    for user in sorted(history):
+
+        if user in active_users:
+            continue
+
+        last_string = history[user]
+
+        if not last_string:
+            continue
+
+        try:
+
+            last_date = datetime.strptime(
+                last_string,
+                "%Y-%m-%d"
+            ).date()
+
+        except ValueError:
+
+            print(
+                "WARNING: Invalid date for {}: {}".format(
+                    user,
+                    last_string
+                )
+            )
+
+            continue
+
+        if last_date < cutoff:
+
+            print(
+                "No GPU jobs for {} since {} -> reset priority to 100".format(
+                    user,
+                    last_string
+                )
+            )
+
+            if not dry_run:
+
+                update_priority(
+                    user,
+                    100
+                )
+
+
+# ======================================================================
+# Slurm priority update
+# ======================================================================
 
 def update_priority(user, priority):
-    """Set Slurm association priority."""
 
     command = [
         SACCTMGR,
@@ -547,12 +769,12 @@ def update_priority(user, priority):
         "priority={}".format(priority)
     ]
 
-    print(
-        "Updating {} -> priority {}".format(
-            user,
-            priority
+    if DEBUG:
+
+        print(
+            "Running:",
+            " ".join(command)
         )
-    )
 
     process = subprocess.Popen(
         command,
@@ -564,6 +786,7 @@ def update_priority(user, priority):
     stdout, stderr = process.communicate()
 
     if process.returncode != 0:
+
         print(
             "ERROR updating {}: {}".format(
                 user,
@@ -572,9 +795,9 @@ def update_priority(user, priority):
         )
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 # Arguments
-# ----------------------------------------------------------------------
+# ======================================================================
 
 def parse_args():
 
@@ -582,19 +805,23 @@ def parse_args():
 
     default_start = (
         now - timedelta(days=7)
-    ).strftime("%Y-%m-%dT%H:%M:%S")
+    ).strftime(
+        "%Y-%m-%dT%H:%M:%S"
+    )
 
     default_end = now.strftime(
         "%Y-%m-%dT%H:%M:%S"
     )
 
     default_user = (
-        __import__("os").environ.get("USER")
-        or __import__("os").environ.get("USERNAME")
+        os.environ.get("USER")
+        or os.environ.get("USERNAME")
     )
 
     parser = argparse.ArgumentParser(
-        description="Report Slurm GPU utilization"
+        description=(
+            "Slurm GPU utilization monitor"
+        )
     )
 
     group = parser.add_mutually_exclusive_group()
@@ -622,14 +849,14 @@ def parse_args():
         "-S",
         "--starttime",
         default=default_start,
-        help="Start time"
+        help="Start time for utilization report"
     )
 
     parser.add_argument(
         "-E",
         "--endtime",
         default=default_end,
-        help="End time"
+        help="End time for utilization report"
     )
 
     parser.add_argument(
@@ -637,7 +864,7 @@ def parse_args():
         "--njobs",
         type=int,
         default=-1,
-        help="Maximum number of jobs per user"
+        help="Maximum jobs per user"
     )
 
     parser.add_argument(
@@ -654,38 +881,54 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--update",
+        "--details",
         action="store_true",
-        help="Update Slurm priority"
+        help="Show individual GPU jobs"
     )
 
     parser.add_argument(
-        "--details",
+        "--update",
         action="store_true",
-        help="Show individual jobs"
+        help="Update Slurm priorities"
+    )
+
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Do not modify Slurm priorities"
     )
 
     return parser.parse_args()
 
 
-# ----------------------------------------------------------------------
+# ======================================================================
 # Main
-# ----------------------------------------------------------------------
+# ======================================================================
 
 def main():
 
     args = parse_args()
 
+    # --------------------------------------------------------------
+    # 1. Normal utilization report
+    # --------------------------------------------------------------
+
     try:
-        output = run_sacct(args)
+
+        output = run_sacct(
+            args,
+            args.starttime,
+            args.endtime
+        )
 
     except RuntimeError as error:
-        print("ERROR:", error)
-        return 1
 
-    if not output.strip():
-        print("No records found.")
-        return 0
+        print(
+            "ERROR:",
+            error
+        )
+
+        return 1
 
     jobs = parse_sacct(output)
 
@@ -693,68 +936,204 @@ def main():
 
     for user in sorted(jobs):
 
-        selected = select_jobs(
+        selected = select_gpu_jobs(
             jobs[user]
         )
 
         if not selected:
             continue
 
-        # Random sampling, if requested.
+        # Optional random selection for detailed report.
         if (
             args.njobs > 0
             and len(selected) > args.njobs
         ):
-            selected = random.sample(
+
+            selected_for_report = random.sample(
                 selected,
                 args.njobs
             )
 
-        user_summary = summarize_user(
+        else:
+
+            selected_for_report = selected
+
+        if args.details:
+
+            print_job_report(
+                user,
+                selected_for_report
+            )
+
+        summary[user] = summarize_user(
             selected
         )
 
-        summary[user] = user_summary
+    if summary:
 
-        if args.details:
-            print_job_report(
-                user,
-                selected
-            )
-
-    if not summary:
-        print(
-            "No GPU jobs found."
-        )
-        return 0
-
-    print_summary(summary)
-
-    # --------------------------------------------------------------
-    # Optionally update Slurm priorities
-    # --------------------------------------------------------------
-    if args.update:
-
-        print(
-            "Updating Slurm association priorities..."
+        print_summary(
+            summary
         )
 
-        for user in sorted(summary):
+    else:
 
-            if user == "rharrison":
-                continue
+        print(
+            "No GPU jobs found in the requested report period."
+        )
 
-            priority = priority_from_utilization(
-                summary[user]["utilization"]
+    # --------------------------------------------------------------
+    # 2. Load GPU activity history
+    # --------------------------------------------------------------
+
+    history = load_gpu_history(
+        GPU_HISTORY_FILE
+    )
+
+    # Users that actually had GPU jobs in the report.
+    active_users = set(
+        summary.keys()
+    )
+
+    # Update their last GPU activity.
+    update_gpu_history(
+        history,
+        active_users
+    )
+
+    # --------------------------------------------------------------
+    # 3. Save history
+    # --------------------------------------------------------------
+
+    save_gpu_history(
+        GPU_HISTORY_FILE,
+        history
+    )
+
+    # --------------------------------------------------------------
+    # 4. Check inactivity over the LAST 14 DAYS
+    # --------------------------------------------------------------
+
+    if args.update or args.dry_run:
+
+        inactive_start = (
+            datetime.now()
+            - timedelta(days=INACTIVE_DAYS)
+        ).strftime(
+            "%Y-%m-%dT%H:%M:%S"
+        )
+
+        inactive_end = datetime.now().strftime(
+            "%Y-%m-%dT%H:%M:%S"
+        )
+
+        try:
+
+            inactive_output = run_sacct(
+                args,
+                inactive_start,
+                inactive_end
             )
 
-            update_priority(
-                user,
-                priority
+        except RuntimeError as error:
+
+            print(
+                "ERROR checking 14-day GPU activity:",
+                error
             )
+
+            return 1
+
+        inactive_jobs = parse_sacct(
+            inactive_output
+        )
+
+        inactive_active_users = set()
+
+        for user in inactive_jobs:
+
+            selected = select_gpu_jobs(
+                inactive_jobs[user]
+            )
+
+            if selected:
+
+                inactive_active_users.add(
+                    user
+                )
+
+                # Update history from the actual
+                # 14-day activity query as well.
+                history[user] = datetime.now().strftime(
+                    "%Y-%m-%d"
+                )
+
+        save_gpu_history(
+            GPU_HISTORY_FILE,
+            history
+        )
+
+        # ----------------------------------------------------------
+        # 5. Set priorities for active GPU users
+        # ----------------------------------------------------------
+
+        if args.update:
+
+            print()
+            print(
+                "Updating GPU-user priorities..."
+            )
+
+            for user in sorted(summary):
+
+                if user == "rharrison":
+                    continue
+
+                utilization = summary[user][
+                    "utilization"
+                ]
+
+                priority = priority_from_utilization(
+                    utilization
+                )
+
+                print(
+                    "{}: {:.2f}% GPU utilization -> priority {}".format(
+                        user,
+                        utilization,
+                        priority
+                    )
+                )
+
+                update_priority(
+                    user,
+                    priority
+                )
+
+        # ----------------------------------------------------------
+        # 6. Reset inactive users
+        # ----------------------------------------------------------
+
+        print()
+        print(
+            "Checking users with no GPU jobs in the last {} days...".format(
+                INACTIVE_DAYS
+            )
+        )
+
+        reset_inactive_users(
+            history,
+            inactive_active_users,
+            dry_run=(
+                args.dry_run
+                or not args.update
+            )
+        )
 
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+
+    raise SystemExit(
+        main()
+    )
