@@ -16,10 +16,10 @@ from datetime import datetime, timedelta
 # Configuration
 # ======================================================================
 #
-# For very large logical job, like with 100+ tasks. Be careful, since user can have multiple parallel 
-# processes/tasks to run and utilize GPUs, or a fraction of a GPU. Use the wall time of the longest task, like "12333.0", 
+# For very large logical job, like with 100+ tasks, be careful, since user can have multiple parallel 
+# processes/tasks to run at the same time and utilize GPUs, or a fraction of a GPU. Use the wall time of the longest task, like "12333.0", 
 # as the real GPU elapsed wall time. 
-# For gputil calculation, it is too complicated now, so simply to count the averaege across all task(total number of tasks).
+# For gpuutil calculation, it is too complicated now, there are a lot of overlaped time slots for many tasks, so now only simply to count the averaege across all task(total number of tasks).
 # Sum(each gpuutil)/Sum(Gpu_hours), which are also # of GPU weighted. This mostly will get 
 # very underestimated ave GPUUTIL for the whole job. More to come...
 #
