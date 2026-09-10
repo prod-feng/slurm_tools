@@ -470,9 +470,7 @@ def parse_sacct(output, args):
     # 6. Sum all GPU-using child steps.
     #
     # This avoids the old bug where only the largest child step was used.
-
     records = parse_raw_sacct(output)
-
     jobs = OrderedDict()
 
     # --------------------------------------------------------------
@@ -530,7 +528,6 @@ def parse_sacct(output, args):
             "parent_gpu_util": gpu_util,
             "parent_gpu_hours": 0.0,
         }
-
     # --------------------------------------------------------------
     # Second pass:
     #
@@ -538,7 +535,6 @@ def parse_sacct(output, args):
     # --------------------------------------------------------------
 
     for data in records:
-
         jobid = data["JobID"]
 
         if not jobid:
@@ -549,16 +545,16 @@ def parse_sacct(output, args):
 
         if is_extern_record(jobid):
             continue
-
+        #if ".0" in jobid.lower():
+            # for Large logical jobs, the first one is not counted
+        #    continue
         parent_id = get_parent_jobid(jobid)
-
         if parent_id not in jobs:
             continue
 
         job = jobs[parent_id]
 
         job["child_records"] += 1
-
         # ----------------------------------------------------------
         # Ignore .extern.
         # ----------------------------------------------------------
@@ -574,7 +570,10 @@ def parse_sacct(output, args):
             data["TRESUsageInAve"],
             data["AllocTRES"]
         )
-
+        #large logical job, ignore the .0 master task
+        #if ".0" in jobid.lower() and gpu_util<=0.0:
+            # for Large logical jobs, the first one is not counted
+        #    continue
         # ----------------------------------------------------------
         # If the child doesn't contain GPU allocation,
         # inherit from the parent.
@@ -666,14 +665,18 @@ def parse_sacct(output, args):
             gpu_util
             * step_gpu_hours
         )
-
+        #Use the actual gpu_hours?
+        #if step_gpu_hours > job["gpu_hours"]:
+        #    job["gpu_hours"] = step_gpu_hours
         job["gpu_hours"] += step_gpu_hours
 
         job["gpu_util_hours"] += (
             step_util_gpu_hours
         )
-
-        job["elapsed"] += elapsed
+        #Use the actual gpu_hours?
+        if step_gpu_hours > job["elapsed"]:
+            job["elapsed"] = step_gpu_hours
+        #job["elapsed"] += elapsed
 
         job["steps"] += 1
 
@@ -795,7 +798,8 @@ def summarize_user(selected_jobs):
     total_gpu_hours = 0.0
 
     total_util_gpu_hours = 0.0
-
+    #
+    total_elapsed = 0.0
     for jobid, job in selected_jobs:
 
         total_gpu_hours += (
@@ -805,6 +809,11 @@ def summarize_user(selected_jobs):
         total_util_gpu_hours += (
             job["gpu_util_hours"]
         )
+        #
+        total_elapsed += (
+            job["elapsed"]
+        )
+
 
     if total_gpu_hours <= 0:
 
@@ -819,7 +828,7 @@ def summarize_user(selected_jobs):
 
     return {
         "jobs": len(selected_jobs),
-        "gpu_hours": total_gpu_hours,
+        "gpu_hours": total_elapsed,#total_gpu_hours,
         "utilization": utilization
     }
 
@@ -1519,3 +1528,4 @@ if __name__ == "__main__":
     raise SystemExit(
         main()
     )
+
