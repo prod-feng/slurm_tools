@@ -3,6 +3,42 @@
 This is a collection of the Slurm tools which are useful.
 
 Some original standalone python scripts are in legacy/ folder.
+## slurm_mon_yml.py
+
+Check Slurm cluster status, save metrics to yaml file:
+
+```
+
+timestamp: '2026-09-18T20:19:00Z'
+nodes:
+  total: 11
+  idle: 0
+  allocated: 11
+  down: 0
+  available: 11
+cpu:
+  total: 111
+  allocated: 33
+  idle: 68
+gpu:
+  total: 92
+  allocated: 88
+  idle: 4
+  types:
+    nvidia_rtx_pro_6000:
+      total: 44
+      allocated: 41
+      idle: 3
+    a100:
+      total: 48
+      allocated: 47
+      idle: 1
+jobs:
+  total: 159
+  running: 49
+  pending: 110
+
+```
 
 ## slurm_accounts 
 Lists Slurm accounts, users, and association, providing advanced filtering function.
