@@ -1281,7 +1281,7 @@ def collect_stats():
 
     stats["timestamp"] = (
         datetime.datetime.now(
-            datetime.timezone.utc
+            # Use local time #datetime.timezone.utc
         ).strftime(
             "%Y-%m-%dT%H:%M:%SZ"
         )
