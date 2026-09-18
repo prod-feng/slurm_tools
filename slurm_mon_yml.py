@@ -13,78 +13,86 @@ Requires:
 
 
 ============================================================
-DATA SOURCES
+SLURM COMMAND PATHS
 ============================================================
 
-Physical node information:
+All Slurm commands use absolute paths.
+
+Change these paths if Slurm is installed elsewhere.
+
+Typical locations:
+
+    /usr/bin/scontrol
+    /usr/bin/squeue
+
+
+============================================================
+NODE INFORMATION
+============================================================
+
+Physical node information is obtained from:
 
     scontrol show node -o
 
-Job information:
 
-    squeue -a -h
+Only compute nodes are included.
 
+A node is considered a compute node when it has a valid:
 
-============================================================
-COMPUTE NODE FILTER
-============================================================
+    Partitions=
 
-scontrol show node lists all Slurm nodes, which can include
-login nodes, service nodes, etc.
-
-Only nodes with a valid Partitions= field are considered
-compute nodes.
-
-Example:
+For example:
 
     Partitions=cpu_extra,cpu_long,cpu_short
 
-is a compute node.
+is included.
 
 Nodes with:
 
     Partitions=(null)
-
     Partitions=N/A
-
     Partitions=None
-
     Partitions=-
+    Partitions=
 
-or an empty Partitions field are ignored.
+are ignored.
 
 
 ============================================================
-GPU LOGIC
+GPU INFORMATION
 ============================================================
 
-A compute node is a GPU node only when its Gres= field
-contains a GPU GRES.
+GPU configuration comes from the node's:
+
+    Gres=
 
 Examples:
 
     Gres=gpu:a100:8
     Gres=gpu:h200:8
     Gres=gpu:rtx6000:4
-    Gres=gpu:a100:4,gpu:h200:4
-
-
-GPU totals come from:
-
-    Gres=
 
 
 GPU allocation comes primarily from:
 
     GresUsed=
 
+If GresUsed is unavailable, AllocTRES is used as fallback.
 
-Example:
+
+============================================================
+GENERIC GPU ALLOCATION
+============================================================
+
+If a node has:
 
     Gres=gpu:a100:44
+
+and:
+
     GresUsed=gpu:42
 
-becomes:
+the result is:
 
     a100:
         total: 44
@@ -97,7 +105,7 @@ If:
     Gres=gpu:h200:8
     GresUsed=gpu:4
 
-then:
+the result is:
 
     h200:
         total: 8
@@ -105,40 +113,38 @@ then:
         idle: 4
 
 
-If GresUsed explicitly contains a GPU type:
-
-    GresUsed=gpu:a100:4
-
-then that type is used directly.
-
-
-============================================================
-MULTIPLE GPU TYPES
-============================================================
-
-If a node has:
+If a node contains multiple GPU types:
 
     Gres=gpu:a100:4,gpu:h200:4
 
-and:
+and Slurm only reports:
 
     GresUsed=gpu:3
 
-the GPU type cannot safely be determined from the generic
-allocation alone.
-
-The script therefore reports:
+the script reports:
 
     generic: 3
 
-rather than guessing.
+because it cannot safely determine whether those 3 GPUs
+are A100 or H200.
+
+
+============================================================
+JOB INFORMATION
+============================================================
+
+Job information is obtained with:
+
+    squeue -a
+
+-a is used so all partitions are included.
 
 
 ============================================================
 OUTPUT
 ============================================================
 
-timestamp: "2026-09-18T19:00:00Z"
+timestamp: "2026-09-18T17:00:00Z"
 
 nodes:
   total: 100
@@ -158,23 +164,16 @@ gpu:
   idle: 2
   types:
     a100:
-      total: 16
-      allocated: 14
+      total: 44
+      allocated: 42
       idle: 2
-    h200:
-      total: 16
-      allocated: 16
-      idle: 0
-    rtx6000:
-      total: 12
-      allocated: 12
-      idle: 0
 
 jobs:
   total: 100
   running: 40
   pending: 60
 """
+
 
 from __future__ import print_function
 
@@ -189,11 +188,21 @@ import yaml
 
 
 # ============================================================
+# Absolute Slurm command paths
+# ============================================================
+
+SLURM_SCONTROL = "/cm/shared/apps/slurm/current/bin/scontrol"
+SLURM_SQUEUE = "/cm/shared/apps/slurm/current/bin/squeue"
+
+
+# ============================================================
 # YAML support
 # ============================================================
 
 def represent_ordered_dict(dumper, data):
-    return dumper.represent_dict(data.items())
+    return dumper.represent_dict(
+        data.items()
+    )
 
 
 yaml.add_representer(
@@ -310,7 +319,7 @@ def normalize_gpu_type(gpu_type):
 
 
 # ============================================================
-# Parse scontrol key=value records
+# Parse scontrol key=value record
 # ============================================================
 
 def parse_key_value_record(record):
@@ -323,8 +332,8 @@ def parse_key_value_record(record):
 
         NodeName=gpu001 NodeAddr=gpu001 State=IDLE
         CPUTot=128 CPUAlloc=0 Gres=gpu:a100:8
-        GresUsed=(null)
-        AllocTRES=cpu=0 Partitions=gpu
+        GresUsed=gpu:2 AllocTRES=cpu=0
+        Partitions=gpu
 
     Returns a dictionary.
     """
@@ -355,28 +364,19 @@ def parse_key_value_record(record):
 
 def is_compute_node(node):
     """
-    Determine whether an scontrol node record represents a
-    compute node.
+    Determine whether a node is a compute node.
 
-    The primary indicator is the Partitions= field.
+    A valid Partitions= field identifies compute nodes.
 
-    Example:
+    Examples:
 
         Partitions=cpu_extra,cpu_long,cpu_short
+        Partitions=gpu
+        Partitions=gpu,gpu_long
 
-    is considered a compute node.
+    are included.
 
-    Login/service nodes with no compute partitions are ignored.
-
-    Invalid values such as:
-
-        (null)
-        N/A
-        None
-        none
-        -
-
-    are not considered compute nodes.
+    Invalid partition values are ignored.
     """
 
     partitions = node.get(
@@ -408,9 +408,9 @@ def is_compute_node(node):
 
 def parse_gpu_gres(gres):
     """
-    Parse GPU information from a Slurm Gres or GresUsed field.
+    Parse GPU information from Gres or GresUsed.
 
-    Supported examples:
+    Examples:
 
         gpu:8
 
@@ -421,8 +421,6 @@ def parse_gpu_gres(gres):
         gpu:rtx6000:4
 
         gpu:a100:8(S:0-7)
-
-        gpu:a100:8(IDX:0-7)
 
         gpu:a100:4,gpu:h200:4
 
@@ -470,7 +468,14 @@ def parse_gpu_gres(gres):
         if not item:
             continue
 
+        # ----------------------------------------------------
         # Remove socket/index information.
+        #
+        # Examples:
+        #
+        # gpu:a100:8(S:0-7)
+        # gpu:a100:8(IDX:0-7)
+        # ----------------------------------------------------
 
         item = item.split(
             "(",
@@ -555,7 +560,7 @@ def parse_gpu_gres(gres):
 
 def is_gpu_node(gres):
     """
-    A node is a GPU node when its Gres field contains a GPU.
+    A node is a GPU node when Gres contains GPU information.
     """
 
     return bool(
@@ -573,7 +578,7 @@ def parse_gpu_tres(value):
     """
     Parse GPU information from AllocTRES/TRES.
 
-    Supported examples:
+    Examples:
 
         gres/gpu=4
 
@@ -655,7 +660,7 @@ def parse_gpu_tres(value):
 
 
 # ============================================================
-# Resolve GPU allocation using the same node's Gres
+# Resolve GPU allocation using node Gres
 # ============================================================
 
 def resolve_gpu_allocation(
@@ -663,8 +668,8 @@ def resolve_gpu_allocation(
     allocated_gpu_info
 ):
     """
-    Resolve generic GPU allocation using the GPU type(s)
-    configured on the SAME physical node.
+    Resolve generic GPU allocation using the GPU type
+    configured on the same physical node.
 
     Example:
 
@@ -695,15 +700,13 @@ def resolve_gpu_allocation(
 
         {"generic": 3}
 
-    because the exact GPU type cannot be determined.
+    because the GPU type cannot safely be determined.
     """
 
     if not allocated_gpu_info:
         return {}
 
     result = OrderedDict()
-
-    # GPU types configured on this physical node.
 
     configured_types = [
         gpu_type
@@ -719,7 +722,7 @@ def resolve_gpu_allocation(
             continue
 
         # ----------------------------------------------------
-        # Explicitly typed allocation.
+        # Explicit GPU type.
         # ----------------------------------------------------
 
         if gpu_type != "generic":
@@ -735,10 +738,10 @@ def resolve_gpu_allocation(
             continue
 
         # ----------------------------------------------------
-        # Generic allocation.
+        # Generic GPU allocation.
         #
-        # Exactly one configured GPU type means we can resolve
-        # it safely.
+        # If exactly one GPU type exists on this node,
+        # resolve generic -> real GPU type.
         # ----------------------------------------------------
 
         if len(configured_types) == 1:
@@ -757,7 +760,7 @@ def resolve_gpu_allocation(
 
         else:
 
-            # Multiple GPU types on this node.
+            # Multiple GPU types on the same node.
             # Do not guess.
             result["generic"] = (
                 result.get(
@@ -771,7 +774,7 @@ def resolve_gpu_allocation(
 
 
 # ============================================================
-# Get all Slurm nodes
+# Get all compute nodes
 # ============================================================
 
 def get_node_info():
@@ -780,11 +783,11 @@ def get_node_info():
 
         scontrol show node -o
 
-    Then keep only nodes with a valid Partitions= field.
+    and retain only compute nodes.
     """
 
     output = run_command([
-        "scontrol",
+        SLURM_SCONTROL,
         "show",
         "node",
         "-o"
@@ -817,9 +820,7 @@ def get_node_info():
             continue
 
         # ----------------------------------------------------
-        # IMPORTANT:
-        #
-        # Ignore login/service/etc. nodes.
+        # Ignore login/service nodes.
         # ----------------------------------------------------
 
         if not is_compute_node(
@@ -842,10 +843,14 @@ def get_node_stats(nodes):
     """
     Calculate node and CPU statistics.
 
-    Only compute nodes are passed to this function.
+    Only compute nodes are processed.
     """
 
     stats = OrderedDict()
+
+    # --------------------------------------------------------
+    # Nodes
+    # --------------------------------------------------------
 
     stats["nodes"] = OrderedDict()
 
@@ -855,6 +860,10 @@ def get_node_stats(nodes):
     stats["nodes"]["down"] = 0
     stats["nodes"]["available"] = 0
 
+    # --------------------------------------------------------
+    # CPU
+    # --------------------------------------------------------
+
     stats["cpu"] = OrderedDict()
 
     stats["cpu"]["total"] = 0
@@ -862,7 +871,7 @@ def get_node_stats(nodes):
     stats["cpu"]["idle"] = 0
 
     # ========================================================
-    # Process each compute node exactly once.
+    # Process compute nodes.
     # ========================================================
 
     for node in nodes:
@@ -893,19 +902,21 @@ def get_node_stats(nodes):
         # Node state.
         # ----------------------------------------------------
 
-        if "mixed" in state_tokens:
+        if (
+            "allocated" in state_tokens
+            or
+            "alloc" in state_tokens
+            or
+            "mixed" in state_tokens
+        ):
 
             stats["nodes"]["allocated"] += 1
 
-        elif "allocated" in state_tokens:
-
-            stats["nodes"]["allocated"] += 1
-
-        elif "alloc" in state_tokens:
-
-            stats["nodes"]["allocated"] += 1
-
-        elif "idle" in state_tokens and not is_down:
+        elif (
+            "idle" in state_tokens
+            and
+            not is_down
+        ):
 
             stats["nodes"]["idle"] += 1
 
@@ -967,19 +978,19 @@ def get_node_stats(nodes):
 
 def get_gpu_stats(nodes):
     """
-    Calculate GPU statistics from compute nodes.
+    Calculate GPU statistics.
 
-    GPU totals:
+    GPU total:
         Gres=
 
     GPU allocation:
         GresUsed=
 
-    Fallback:
+    Allocation fallback:
         AllocTRES=
 
-    Generic GPU allocations are resolved using the GPU type
-    configured in Gres on the same physical node.
+    Generic GPU allocation is resolved from the GPU type
+    configured on the same node.
     """
 
     gpu = OrderedDict()
@@ -991,7 +1002,7 @@ def get_gpu_stats(nodes):
     gpu["types"] = OrderedDict()
 
     # ========================================================
-    # Process each compute node.
+    # Process every compute node.
     # ========================================================
 
     for node in nodes:
@@ -1007,7 +1018,7 @@ def get_gpu_stats(nodes):
         )
 
         # ----------------------------------------------------
-        # Only GPU nodes.
+        # Ignore CPU-only nodes.
         # ----------------------------------------------------
 
         if not is_gpu_node(
@@ -1024,9 +1035,7 @@ def get_gpu_stats(nodes):
         )
 
         # ----------------------------------------------------
-        # GPU allocation.
-        #
-        # Preferred source:
+        # Preferred allocation source:
         #
         #     GresUsed=
         # ----------------------------------------------------
@@ -1039,7 +1048,9 @@ def get_gpu_stats(nodes):
         )
 
         # ----------------------------------------------------
-        # Fallback to AllocTRES.
+        # Fallback:
+        #
+        #     AllocTRES=
         # ----------------------------------------------------
 
         if not allocated_gpu_info:
@@ -1052,8 +1063,7 @@ def get_gpu_stats(nodes):
             )
 
         # ----------------------------------------------------
-        # Resolve generic allocation based on this node's
-        # configured GPU type.
+        # Resolve generic allocation.
         # ----------------------------------------------------
 
         allocated_gpu_info = (
@@ -1064,7 +1074,7 @@ def get_gpu_stats(nodes):
         )
 
         # ====================================================
-        # Add total GPU count.
+        # Add GPU totals.
         # ====================================================
 
         for gpu_type, count in (
@@ -1092,7 +1102,7 @@ def get_gpu_stats(nodes):
             gpu["total"] += count
 
         # ====================================================
-        # Add allocated GPU count.
+        # Add GPU allocations.
         # ====================================================
 
         for gpu_type, count in (
@@ -1119,9 +1129,9 @@ def get_gpu_stats(nodes):
 
             gpu["allocated"] += count
 
-        # ----------------------------------------------------
+        # ====================================================
         # Sanity check.
-        # ----------------------------------------------------
+        # ====================================================
 
         total_node_gpus = sum(
             total_gpu_info.values()
@@ -1158,7 +1168,7 @@ def get_gpu_stats(nodes):
         )
 
     # ========================================================
-    # Calculate overall idle GPUs.
+    # Overall idle.
     # ========================================================
 
     gpu["idle"] = max(
@@ -1187,7 +1197,7 @@ def get_job_stats():
     # --------------------------------------------------------
 
     total_output = run_command([
-        "squeue",
+        SLURM_SQUEUE,
         "-a",
         "-h",
         "-o",
@@ -1199,7 +1209,7 @@ def get_job_stats():
     # --------------------------------------------------------
 
     running_output = run_command([
-        "squeue",
+        SLURM_SQUEUE,
         "-a",
         "-h",
         "-t",
@@ -1213,7 +1223,7 @@ def get_job_stats():
     # --------------------------------------------------------
 
     pending_output = run_command([
-        "squeue",
+        SLURM_SQUEUE,
         "-a",
         "-h",
         "-t",
@@ -1246,7 +1256,7 @@ def get_job_stats():
 def collect_stats():
 
     # --------------------------------------------------------
-    # Get all physical nodes, then filter to compute nodes.
+    # Get compute nodes.
     # --------------------------------------------------------
 
     nodes = get_node_info()
@@ -1274,14 +1284,14 @@ def collect_stats():
     job_stats = get_job_stats()
 
     # --------------------------------------------------------
-    # Final result.
+    # Final statistics.
     # --------------------------------------------------------
 
     stats = OrderedDict()
 
     stats["timestamp"] = (
         datetime.datetime.now(
-            # Use local time #datetime.timezone.utc
+            #Use local time #datetime.timezone.utc
         ).strftime(
             "%Y-%m-%dT%H:%M:%SZ"
         )
