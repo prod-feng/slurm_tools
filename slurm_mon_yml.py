@@ -1293,7 +1293,7 @@ def collect_stats():
         datetime.datetime.now(
             #Use local time #datetime.timezone.utc
         ).strftime(
-            "%Y-%m-%dT%H:%M:%SZ"
+            "%Y-%m-%dT%H:%M:%S" #%SZ
         )
     )
 
