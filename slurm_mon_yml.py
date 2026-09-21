@@ -81,6 +81,58 @@ If GresUsed is unavailable, AllocTRES is used as fallback.
 
 
 ============================================================
+DOWN / UNAVAILABLE INFORMATION
+============================================================
+
+CPU and GPU resources on unavailable nodes are reported as
+"down".
+
+The following scontrol node states are considered
+unavailable:
+
+    down
+    drain
+    drained
+    draining
+    fail
+    failing
+    future
+    maint
+    perfctrs
+    planned
+    power_down
+    power_up
+    reserved
+    unknown
+
+For example:
+
+    State=MIXED+DRAIN+REBOOT_REQUESTED
+
+is considered down because it contains DRAIN.
+
+The "down" resource count is reported as:
+
+    cpu:
+        total:
+        allocated:
+        idle:
+        down:
+
+    gpu:
+        total:
+        allocated:
+        idle:
+        down:
+        types:
+            h200:
+                total:
+                allocated:
+                idle:
+                down:
+
+
+============================================================
 GENERIC GPU ALLOCATION
 ============================================================
 
@@ -157,16 +209,19 @@ cpu:
   total: 6400
   allocated: 3000
   idle: 3400
+  down: 640
 
 gpu:
   total: 44
   allocated: 42
   idle: 2
+  down: 8
   types:
     a100:
       total: 44
       allocated: 42
       idle: 2
+      down: 8
 
 jobs:
   total: 100
@@ -193,6 +248,28 @@ import yaml
 
 SLURM_SCONTROL = "/cm/shared/apps/slurm/current/bin/scontrol"
 SLURM_SQUEUE = "/cm/shared/apps/slurm/current/bin/squeue"
+
+
+# ============================================================
+# Slurm node states considered unavailable
+# ============================================================
+
+DOWN_STATES = set([
+    "down",
+    "drain",
+    "drained",
+    "draining",
+    "fail",
+    "failing",
+    "future",
+    "maint",
+    "perfctrs",
+    "planned",
+    "power_down",
+    "power_up",
+    "reserved",
+    "unknown"
+])
 
 
 # ============================================================
@@ -869,6 +946,7 @@ def get_node_stats(nodes):
     stats["cpu"]["total"] = 0
     stats["cpu"]["allocated"] = 0
     stats["cpu"]["idle"] = 0
+    stats["cpu"]["down"] = 0
 
     # ========================================================
     # Process compute nodes.
@@ -888,21 +966,29 @@ def get_node_stats(nodes):
             for token in state.split("+")
         )
 
-        is_down = (
-            "down" in state_tokens
-            or
-            "drain" in state_tokens
-            or
-            "fail" in state_tokens
-            or
-            "unknown" in state_tokens
+        is_down = bool(
+            state_tokens.intersection(
+                DOWN_STATES
+            )
         )
 
         # ----------------------------------------------------
         # Node state.
+        #
+        # IMPORTANT:
+        # Check is_down BEFORE allocated/mixed because a
+        # state such as:
+        #
+        #     MIXED+DRAIN+REBOOT_REQUESTED
+        #
+        # must be counted as down, not allocated.
         # ----------------------------------------------------
 
-        if (
+        if is_down:
+
+            stats["nodes"]["down"] += 1
+
+        elif (
             "allocated" in state_tokens
             or
             "alloc" in state_tokens
@@ -912,17 +998,9 @@ def get_node_stats(nodes):
 
             stats["nodes"]["allocated"] += 1
 
-        elif (
-            "idle" in state_tokens
-            and
-            not is_down
-        ):
+        elif "idle" in state_tokens:
 
             stats["nodes"]["idle"] += 1
-
-        elif is_down:
-
-            stats["nodes"]["down"] += 1
 
         # ----------------------------------------------------
         # Available.
@@ -958,6 +1036,16 @@ def get_node_stats(nodes):
             cpu_allocated
         )
 
+        # ----------------------------------------------------
+        # CPU on unavailable nodes.
+        # ----------------------------------------------------
+
+        if is_down:
+
+            stats["cpu"]["down"] += (
+                cpu_total
+            )
+
     # --------------------------------------------------------
     # CPU idle.
     # --------------------------------------------------------
@@ -991,6 +1079,9 @@ def get_gpu_stats(nodes):
 
     Generic GPU allocation is resolved from the GPU type
     configured on the same node.
+
+    GPU "down" counts GPUs located on nodes whose state is
+    considered unavailable.
     """
 
     gpu = OrderedDict()
@@ -998,6 +1089,7 @@ def get_gpu_stats(nodes):
     gpu["total"] = 0
     gpu["allocated"] = 0
     gpu["idle"] = 0
+    gpu["down"] = 0
 
     gpu["types"] = OrderedDict()
 
@@ -1010,6 +1102,22 @@ def get_gpu_stats(nodes):
         node_name = node.get(
             "NodeName",
             "unknown"
+        )
+
+        state = node.get(
+            "State",
+            ""
+        ).lower()
+
+        state_tokens = set(
+            token.strip().lower()
+            for token in state.split("+")
+        )
+
+        is_down = bool(
+            state_tokens.intersection(
+                DOWN_STATES
+            )
         )
 
         gres = node.get(
@@ -1094,12 +1202,25 @@ def get_gpu_stats(nodes):
                 gpu["types"][gpu_type]["total"] = 0
                 gpu["types"][gpu_type]["allocated"] = 0
                 gpu["types"][gpu_type]["idle"] = 0
+                gpu["types"][gpu_type]["down"] = 0
 
             gpu["types"][gpu_type]["total"] += (
                 count
             )
 
             gpu["total"] += count
+
+            # ------------------------------------------------
+            # GPUs on unavailable nodes.
+            # ------------------------------------------------
+
+            if is_down:
+
+                gpu["types"][gpu_type]["down"] += (
+                    count
+                )
+
+                gpu["down"] += count
 
         # ====================================================
         # Add GPU allocations.
@@ -1122,6 +1243,7 @@ def get_gpu_stats(nodes):
                 gpu["types"][gpu_type]["total"] = 0
                 gpu["types"][gpu_type]["allocated"] = 0
                 gpu["types"][gpu_type]["idle"] = 0
+                gpu["types"][gpu_type]["down"] = 0
 
             gpu["types"][gpu_type]["allocated"] += (
                 count
@@ -1291,9 +1413,9 @@ def collect_stats():
 
     stats["timestamp"] = (
         datetime.datetime.now(
-            #Use local time #datetime.timezone.utc
+            datetime.timezone.utc
         ).strftime(
-            "%Y-%m-%dT%H:%M:%S" #%SZ
+            "%Y-%m-%dT%H:%M:%SZ"
         )
     )
 
