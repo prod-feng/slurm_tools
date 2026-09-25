@@ -15,8 +15,12 @@ import time
 
 
 # ================================================================
-# sacct fields
+# Configuration
 # ================================================================
+
+DEFAULT_EMAIL = "hpc_admins@example.edu"
+
+DEFAULT_LOG = "/var/log/slurmctld.log"
 
 SACCT_FIELDS = [
     "JobID",
@@ -37,111 +41,41 @@ SACCT_FIELDS = [
 
 
 # ================================================================
-# Data structures
-# ================================================================
-
-class SacctRecord(object):
-
-    def __init__(self, row):
-        self.job_id = row.get("JobID", "")
-        self.job_id_raw = row.get("JobIDRaw", "")
-        self.job_name = row.get("JobName", "")
-        self.user = row.get("User", "")
-        self.partition = row.get("Partition", "")
-        self.state = row.get("State", "")
-        self.elapsed = row.get("Elapsed", "")
-        self.timelimit = row.get("Timelimit", "")
-        self.start = row.get("Start", "")
-        self.end = row.get("End", "")
-        self.alloc_tres = row.get("AllocTRES", "")
-        self.tres_usage_in_ave = row.get(
-            "TRESUsageInAve", ""
-        )
-        self.tres_usage_in_tot = row.get(
-            "TRESUsageInTot", ""
-        )
-        self.tres_usage_in_max = row.get(
-            "TRESUsageInMax", ""
-        )
-
-
-class PartitionInfo(object):
-
-    def __init__(self):
-        self.name = ""
-        self.default_time = ""
-        self.max_time = ""
-
-        self.default_seconds = None
-        self.max_seconds = None
-
-
-class JobResult(object):
-
-    def __init__(self):
-
-        self.job_id = ""
-        self.job_id_raw = ""
-        self.user = ""
-        self.partition = ""
-        self.state = ""
-        self.elapsed = ""
-
-        self.requested_time = ""
-        self.requested_seconds = None
-
-        self.cpus = None
-
-        self.memory_bytes = None
-        self.memory_used_bytes = None
-
-        self.gpu_count = None
-        self.gpu_types = ""
-        self.gpu_efficiency_percent = None
-
-        self.cpu_used_seconds = None
-        self.cpu_efficiency_percent = None
-
-        self.memory_efficiency_percent = None
-
-        self.elapsed_seconds = None
-
-        self.partition_default_time = ""
-        self.partition_max_time = ""
-
-        self.elapsed_requested_percent = None
-        self.elapsed_default_percent = None
-        self.elapsed_max_percent = None
-
-        self.step_count = 0
-        self.application_step_count = 0
-
-        self.job_step = ""
-
-        self.alloc_tres = ""
-        self.tres_usage_in_ave = ""
-
-
-# ================================================================
-# Utilities
+# Basic helpers
 # ================================================================
 
 def eprint(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
 
 
+def cap_percent(value):
+    if value is None:
+        return None
+
+    try:
+        value = float(value)
+    except (ValueError, TypeError):
+        return None
+
+    if value < 0:
+        return 0.0
+
+    if value > 100.0:
+        return 100.0
+
+    return value
+
+
+def format_percent(value):
+    value = cap_percent(value)
+
+    if value is None:
+        return "-"
+
+    return "%.2f%%" % value
+
+
 def parse_elapsed(value):
-    """
-    Convert Slurm duration into seconds.
-
-    Examples:
-
-        00:07:48
-        01:02:03
-        1-02:03:04
-        30
-    """
-
     if not value:
         return None
 
@@ -166,19 +100,16 @@ def parse_elapsed(value):
         parts = value.split(":")
 
         if len(parts) == 3:
-
             hours = int(parts[0])
             minutes = int(parts[1])
             seconds = float(parts[2])
 
         elif len(parts) == 2:
-
             hours = 0
             minutes = int(parts[0])
             seconds = float(parts[1])
 
         elif len(parts) == 1:
-
             hours = 0
             minutes = 0
             seconds = float(parts[0])
@@ -198,18 +129,6 @@ def parse_elapsed(value):
 
 
 def parse_time_limit(value):
-    """
-    Parse Slurm Timelimit.
-
-    Timelimit can be:
-
-        30
-        01:00:00
-        1-00:00:00
-        UNLIMITED
-        Partition
-    """
-
     if not value:
         return None
 
@@ -224,10 +143,8 @@ def parse_time_limit(value):
     ):
         return None
 
-    # Slurm time limits may be represented as
-    # an integer number of minutes.
+    # sacct may report a numeric Timelimit as minutes.
     if re.match(r"^[0-9]+$", value):
-
         try:
             return int(value) * 60
         except ValueError:
@@ -237,7 +154,6 @@ def parse_time_limit(value):
 
 
 def format_duration(seconds):
-
     if seconds is None:
         return "-"
 
@@ -256,7 +172,6 @@ def format_duration(seconds):
     seconds %= 60
 
     if days:
-
         return "%d-%02d:%02d:%02d" % (
             days,
             hours,
@@ -271,18 +186,47 @@ def format_duration(seconds):
     )
 
 
+def format_short_duration(seconds):
+    if seconds is None:
+        return "-"
+
+    try:
+        seconds = int(round(float(seconds)))
+    except (ValueError, TypeError):
+        return "-"
+
+    days = seconds // 86400
+    seconds %= 86400
+
+    hours = seconds // 3600
+    seconds %= 3600
+
+    minutes = seconds // 60
+    seconds %= 60
+
+    if days:
+        return "%dd %02d:%02d" % (
+            days,
+            hours,
+            minutes,
+        )
+
+    if hours:
+        return "%d:%02d" % (
+            hours,
+            minutes,
+        )
+
+    if minutes:
+        return "%d:%02d" % (
+            minutes,
+            seconds,
+        )
+
+    return "%ds" % seconds
+
+
 def parse_memory(value):
-    """
-    Convert Slurm memory value to bytes.
-
-    Examples:
-
-        32G
-        412564K
-        1.5G
-        1024M
-    """
-
     if not value:
         return None
 
@@ -319,7 +263,6 @@ def parse_memory(value):
 
 
 def format_bytes(value):
-
     if value is None:
         return "-"
 
@@ -337,7 +280,6 @@ def format_bytes(value):
     for unit in units:
 
         if abs(value) < 1024:
-
             return "%.2f%s" % (
                 value,
                 unit,
@@ -348,8 +290,28 @@ def format_bytes(value):
     return "%.2fPiB" % value
 
 
-def parse_tres(value):
+def format_memory_gb(value):
+    if value is None:
+        return "-"
 
+    gb = float(value) / (1024.0 ** 3)
+
+    if gb >= 1024:
+        return "%.0f TB" % (gb / 1024.0)
+
+    if gb >= 1:
+
+        if gb == int(gb):
+            return "%.0f GB" % gb
+
+        return "%.1f GB" % gb
+
+    mb = float(value) / (1024.0 ** 2)
+
+    return "%.0f MB" % mb
+
+
+def parse_tres(value):
     result = {}
 
     if not value:
@@ -377,7 +339,6 @@ def parse_gpu_info(tres):
         if key.startswith("gres/gpu:"):
 
             try:
-
                 count = float(value)
 
                 if gpu_count is None:
@@ -397,14 +358,40 @@ def parse_gpu_info(tres):
                 )
             )
 
-        elif key == "gres/gpu":
+    if gpu_count is None and "gres/gpu" in tres:
 
-            try:
-                gpu_count = float(value)
-            except ValueError:
-                pass
+        try:
+            gpu_count = float(
+                tres["gres/gpu"]
+            )
+        except ValueError:
+            pass
 
     return gpu_count, ",".join(gpu_types)
+
+
+def parse_gpu_percent(value):
+
+    if not value:
+        return None
+
+    value = value.strip()
+
+    match = re.match(
+        r"^\s*([0-9]+(?:\.[0-9]+)?)"
+        r"\s*%?\s*$",
+        value,
+    )
+
+    if not match:
+        return None
+
+    try:
+        result = float(match.group(1))
+    except ValueError:
+        return None
+
+    return cap_percent(result)
 
 
 def format_number(value):
@@ -418,12 +405,261 @@ def format_number(value):
     return "%.2f" % float(value)
 
 
-def format_percent(value):
+# ================================================================
+# User email lookup
+# ================================================================
 
-    if value is None:
-        return "-"
+def get_user_email(username):
+    """
+    Resolve Slurm username to email address.
 
-    return "%.2f%%" % float(value)
+    Site-specific convention:
+
+        getent passwd USER |
+            awk -F':' '{print $5}' |
+            awk -F',' '{print $2}' |
+            egrep -ho '[[:graph:]]+@[[:graph:]]+'
+
+    Expected passwd entry:
+
+        user:x:1234:1234:Full Name,user@example.edu:/home/user:/bin/bash
+
+    The email is expected to be the second comma-separated
+    field of GECOS.
+
+    If the address cannot be found, DEFAULT_EMAIL is returned.
+    """
+
+    try:
+
+        proc = subprocess.Popen(
+            ["getent", "passwd", username],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            universal_newlines=True,
+        )
+
+        stdout, stderr = proc.communicate()
+
+    except OSError as exc:
+
+        eprint(
+            "[WARN] Cannot execute getent for %s: %s"
+            % (
+                username,
+                exc,
+            )
+        )
+
+        eprint(
+            "[INFO] Using fallback email: %s"
+            % DEFAULT_EMAIL
+        )
+
+        return DEFAULT_EMAIL
+
+    if proc.returncode != 0:
+
+        eprint(
+            "[WARN] getent passwd failed for %s: %s"
+            % (
+                username,
+                stderr.strip(),
+            )
+        )
+
+        eprint(
+            "[INFO] Using fallback email: %s"
+            % DEFAULT_EMAIL
+        )
+
+        return DEFAULT_EMAIL
+
+    for line in stdout.splitlines():
+
+        line = line.strip()
+
+        if not line:
+            continue
+
+        fields = line.split(":")
+
+        # passwd format:
+        #
+        # username:x:uid:gid:GECOS:home:shell
+
+        if len(fields) < 5:
+            continue
+
+        gecos = fields[4]
+
+        # Site convention:
+        #
+        # GECOS = "Full Name,email@example.edu,..."
+
+        gecos_fields = gecos.split(",")
+
+        if len(gecos_fields) < 2:
+            continue
+
+        email_field = gecos_fields[1].strip()
+
+        # Equivalent to the useful part of:
+        #
+        # egrep -ho '[[:graph:]]+@[[:graph:]]+'
+
+        match = re.search(
+            r"[^\s,;]+@[^\s,;]+",
+            email_field,
+        )
+
+        if match:
+            return match.group(0)
+
+    eprint(
+        "[WARN] Cannot find email address for user %s"
+        % username
+    )
+
+    eprint(
+        "[INFO] Using fallback email: %s"
+        % DEFAULT_EMAIL
+    )
+
+    return DEFAULT_EMAIL
+
+
+# ================================================================
+# Data structures
+# ================================================================
+
+class SacctRecord(object):
+
+    def __init__(self, row):
+
+        self.job_id = row.get(
+            "JobID",
+            "",
+        )
+
+        self.job_id_raw = row.get(
+            "JobIDRaw",
+            "",
+        )
+
+        self.job_name = row.get(
+            "JobName",
+            "",
+        )
+
+        self.user = row.get(
+            "User",
+            "",
+        )
+
+        self.partition = row.get(
+            "Partition",
+            "",
+        )
+
+        self.state = row.get(
+            "State",
+            "",
+        )
+
+        self.elapsed = row.get(
+            "Elapsed",
+            "",
+        )
+
+        self.timelimit = row.get(
+            "Timelimit",
+            "",
+        )
+
+        self.start = row.get(
+            "Start",
+            "",
+        )
+
+        self.end = row.get(
+            "End",
+            "",
+        )
+
+        self.alloc_tres = row.get(
+            "AllocTRES",
+            "",
+        )
+
+        self.tres_usage_in_ave = row.get(
+            "TRESUsageInAve",
+            "",
+        )
+
+        self.tres_usage_in_tot = row.get(
+            "TRESUsageInTot",
+            "",
+        )
+
+        self.tres_usage_in_max = row.get(
+            "TRESUsageInMax",
+            "",
+        )
+
+
+class PartitionInfo(object):
+
+    def __init__(self):
+
+        self.name = ""
+        self.default_time = ""
+        self.max_time = ""
+
+        self.default_seconds = None
+        self.max_seconds = None
+
+
+class JobResult(object):
+
+    def __init__(self):
+
+        self.job_id = ""
+        self.job_id_raw = ""
+        self.job_name = ""
+        self.user = ""
+        self.partition = ""
+        self.state = ""
+        self.elapsed = ""
+
+        self.requested_time = ""
+        self.requested_seconds = None
+
+        self.cpus = None
+        self.cpu_used_seconds = None
+        self.cpu_efficiency_percent = None
+
+        self.memory_bytes = None
+        self.memory_used_bytes = None
+        self.memory_efficiency_percent = None
+
+        self.gpu_count = None
+        self.gpu_types = ""
+        self.gpu_efficiency_percent = None
+
+        self.elapsed_seconds = None
+
+        self.partition_default_time = ""
+        self.partition_max_time = ""
+
+        self.elapsed_requested_percent = None
+        self.elapsed_default_percent = None
+        self.elapsed_max_percent = None
+
+        self.step_count = 0
+        self.application_step_count = 0
+
+        self.job_step = ""
 
 
 # ================================================================
@@ -443,7 +679,9 @@ def run_sacct(
         "sacct",
         "-Pn",
         "--delimiter=|",
-        "--format=" + ",".join(SACCT_FIELDS),
+        "--format=" + ",".join(
+            SACCT_FIELDS
+        ),
     ]
 
     if job_id:
@@ -543,7 +781,7 @@ def run_sacct(
 
 
 # ================================================================
-# Job / step identification
+# Step selection
 # ================================================================
 
 def is_step(record):
@@ -553,12 +791,16 @@ def is_step(record):
 
 def is_extern(record):
 
-    return record.job_id.endswith(".extern")
+    return record.job_id.endswith(
+        ".extern"
+    )
 
 
 def is_batch(record):
 
-    return record.job_id.endswith(".batch")
+    return record.job_id.endswith(
+        ".batch"
+    )
 
 
 def find_job_record(records, job_id):
@@ -587,19 +829,15 @@ def find_steps(records, job_id):
     ]
 
 
-# ================================================================
-# Usage selection
-# ================================================================
-
 def usage_has_cpu_or_memory(record):
 
     usage = parse_tres(
         record.tres_usage_in_ave
     )
 
-    return bool(
-        usage.get("cpu")
-        or usage.get("mem")
+    return (
+        "cpu" in usage
+        or "mem" in usage
     )
 
 
@@ -607,19 +845,9 @@ def select_usage_record(
     job,
     steps,
 ):
-    """
-    Select the usage step.
 
-    Priority:
-
-        1. .batch if it has CPU/memory usage
-        2. single application step
-
-    .extern is never selected.
-
-    If there are multiple application steps,
-    aggregation is performed instead.
-    """
+    # First preference: .batch
+    # if it has actual usage.
 
     for step in steps:
 
@@ -630,6 +858,9 @@ def select_usage_record(
 
             return step
 
+    # If there is exactly one application
+    # step, use it.
+
     application_steps = [
         step
         for step in steps
@@ -638,83 +869,36 @@ def select_usage_record(
     ]
 
     if len(application_steps) == 1:
-
         return application_steps[0]
 
     return None
 
 
-def parse_gpu_percent(value):
-
-    if not value:
-        return None
-
-    value = value.strip()
-
-    match = re.match(
-        r"^\s*([0-9]+(?:\.[0-9]+)?)"
-        r"\s*%?\s*$",
-        value,
-    )
-
-    if not match:
-        return None
-
-    try:
-
-        result = float(
-            match.group(1)
-        )
-
-    except ValueError:
-
-        return None
-
-    if result < 0 or result > 100:
-        return None
-
-    return result
-
-
 def aggregate_step_usage(
     application_steps
 ):
-    """
-    Aggregate usage from multiple application steps.
-
-    CPU:
-        sum of CPU time.
-
-    Memory:
-        maximum reported memory usage.
-
-    GPU:
-        average of explicitly reported GPU
-        utilization values, if available.
-    """
 
     cpu_seconds = 0.0
     have_cpu = False
 
-    max_memory = None
+    peak_memory = None
 
-    gpu_util_sum = 0.0
-    gpu_util_count = 0
+    gpu_values = []
 
     for step in application_steps:
 
-        usage = parse_tres(
+        ave = parse_tres(
             step.tres_usage_in_ave
         )
 
-        # ----------------------------------------------------------
-        # CPU
-        # ----------------------------------------------------------
+        max_usage = parse_tres(
+            step.tres_usage_in_max
+        )
 
-        if "cpu" in usage:
+        if "cpu" in ave:
 
             cpu = parse_elapsed(
-                usage["cpu"]
+                ave["cpu"]
             )
 
             if cpu is not None:
@@ -722,57 +906,65 @@ def aggregate_step_usage(
                 cpu_seconds += cpu
                 have_cpu = True
 
-        # ----------------------------------------------------------
-        # Memory
-        # ----------------------------------------------------------
+        mem_value = None
 
-        if "mem" in usage:
+        if "mem" in max_usage:
 
-            mem = parse_memory(
-                usage["mem"]
+            mem_value = parse_memory(
+                max_usage["mem"]
             )
 
-            if mem is not None:
-
-                if (
-                    max_memory is None
-                    or mem > max_memory
-                ):
-
-                    max_memory = mem
-
-        # ----------------------------------------------------------
-        # GPU utilization
-        # ----------------------------------------------------------
-
-        for key in (
-            "gres/gpuutil",
-            "gpuutil",
+        if (
+            mem_value is None
+            and "mem" in ave
         ):
 
-            if key in usage:
+            mem_value = parse_memory(
+                ave["mem"]
+            )
 
-                gpu_value = parse_gpu_percent(
-                    usage[key]
-                )
+        if mem_value is not None:
 
-                if gpu_value is not None:
+            if (
+                peak_memory is None
+                or mem_value > peak_memory
+            ):
 
-                    gpu_util_sum += gpu_value
-                    gpu_util_count += 1
+                peak_memory = mem_value
+
+        for source in (
+            ave,
+            max_usage,
+        ):
+
+            for key in (
+                "gres/gpuutil",
+                "gpuutil",
+            ):
+
+                if key in source:
+
+                    gpu = parse_gpu_percent(
+                        source[key]
+                    )
+
+                    if gpu is not None:
+                        gpu_values.append(
+                            gpu
+                        )
 
     gpu_efficiency = None
 
-    if gpu_util_count:
+    if gpu_values:
 
         gpu_efficiency = (
-            gpu_util_sum
-            / float(gpu_util_count)
+            sum(gpu_values)
+            / float(len(gpu_values))
         )
 
     return (
         cpu_seconds if have_cpu else None,
-        max_memory,
+        peak_memory,
         gpu_efficiency,
     )
 
@@ -790,10 +982,7 @@ def get_partition_info(partition):
         return None
 
     if partition in PARTITION_CACHE:
-
-        return PARTITION_CACHE[
-            partition
-        ]
+        return PARTITION_CACHE[partition]
 
     info = PartitionInfo()
 
@@ -824,9 +1013,7 @@ def get_partition_info(partition):
             % exc
         )
 
-        PARTITION_CACHE[
-            partition
-        ] = info
+        PARTITION_CACHE[partition] = info
 
         return info
 
@@ -840,15 +1027,13 @@ def get_partition_info(partition):
             )
         )
 
-        PARTITION_CACHE[
-            partition
-        ] = info
+        PARTITION_CACHE[partition] = info
 
         return info
 
     text = stdout.replace(
         "\n",
-        " "
+        " ",
     )
 
     match = re.search(
@@ -858,9 +1043,7 @@ def get_partition_info(partition):
 
     if match:
 
-        info.default_time = (
-            match.group(1)
-        )
+        info.default_time = match.group(1)
 
         info.default_seconds = (
             parse_time_limit(
@@ -875,9 +1058,7 @@ def get_partition_info(partition):
 
     if match:
 
-        info.max_time = (
-            match.group(1)
-        )
+        info.max_time = match.group(1)
 
         info.max_seconds = (
             parse_time_limit(
@@ -885,15 +1066,13 @@ def get_partition_info(partition):
             )
         )
 
-    PARTITION_CACHE[
-        partition
-    ] = info
+    PARTITION_CACHE[partition] = info
 
     return info
 
 
 # ================================================================
-# Calculate result
+# Metrics
 # ================================================================
 
 def calculate_job_result(
@@ -905,38 +1084,31 @@ def calculate_job_result(
 
     result.job_id = job.job_id
     result.job_id_raw = job.job_id_raw
+    result.job_name = job.job_name
     result.user = job.user
     result.partition = job.partition
     result.state = job.state
     result.elapsed = job.elapsed
-    result.alloc_tres = job.alloc_tres
-
-    # --------------------------------------------------------------
-    # Requested wall time
-    # --------------------------------------------------------------
 
     result.requested_time = job.timelimit
 
-    result.requested_seconds = parse_time_limit(
-        job.timelimit
+    result.requested_seconds = (
+        parse_time_limit(
+            job.timelimit
+        )
     )
 
-    # --------------------------------------------------------------
-    # Elapsed
-    # --------------------------------------------------------------
-
-    result.elapsed_seconds = parse_elapsed(
-        job.elapsed
+    result.elapsed_seconds = (
+        parse_elapsed(
+            job.elapsed
+        )
     )
 
     allocation = parse_tres(
         job.alloc_tres
     )
 
-    # --------------------------------------------------------------
-    # CPU allocation
-    # --------------------------------------------------------------
-
+    # CPU
     if "cpu" in allocation:
 
         try:
@@ -946,24 +1118,17 @@ def calculate_job_result(
             )
 
         except ValueError:
-
             pass
 
-    # --------------------------------------------------------------
-    # Memory allocation
-    # --------------------------------------------------------------
-
+    # Memory
     result.memory_bytes = parse_memory(
         allocation.get(
             "mem",
-            ""
+            "",
         )
     )
 
-    # --------------------------------------------------------------
-    # GPU allocation
-    # --------------------------------------------------------------
-
+    # GPU
     (
         result.gpu_count,
         result.gpu_types,
@@ -971,10 +1136,7 @@ def calculate_job_result(
         allocation
     )
 
-    # --------------------------------------------------------------
     # Partition
-    # --------------------------------------------------------------
-
     partition_info = get_partition_info(
         job.partition
     )
@@ -996,11 +1158,13 @@ def calculate_job_result(
         ):
 
             result.elapsed_default_percent = (
-                result.elapsed_seconds
-                / float(
-                    partition_info.default_seconds
+                cap_percent(
+                    result.elapsed_seconds
+                    / float(
+                        partition_info.default_seconds
+                    )
+                    * 100.0
                 )
-                * 100.0
             )
 
         if (
@@ -1010,17 +1174,16 @@ def calculate_job_result(
         ):
 
             result.elapsed_max_percent = (
-                result.elapsed_seconds
-                / float(
-                    partition_info.max_seconds
+                cap_percent(
+                    result.elapsed_seconds
+                    / float(
+                        partition_info.max_seconds
+                    )
+                    * 100.0
                 )
-                * 100.0
             )
 
-    # --------------------------------------------------------------
-    # Elapsed / requested time
-    # --------------------------------------------------------------
-
+    # Requested walltime
     if (
         result.elapsed_seconds is not None
         and result.requested_seconds is not None
@@ -1028,25 +1191,22 @@ def calculate_job_result(
     ):
 
         result.elapsed_requested_percent = (
-            result.elapsed_seconds
-            / float(
-                result.requested_seconds
+            cap_percent(
+                result.elapsed_seconds
+                / float(
+                    result.requested_seconds
+                )
+                * 100.0
             )
-            * 100.0
         )
 
-    # --------------------------------------------------------------
     # Steps
-    # --------------------------------------------------------------
-
     steps = find_steps(
         records,
-        job.job_id
+        job.job_id,
     )
 
-    result.step_count = len(
-        steps
-    )
+    result.step_count = len(steps)
 
     application_steps = [
         step
@@ -1059,13 +1219,10 @@ def calculate_job_result(
         len(application_steps)
     )
 
-    # --------------------------------------------------------------
-    # Select usage step
-    # --------------------------------------------------------------
-
+    # Usage record
     usage_record = select_usage_record(
         job,
-        steps
+        steps,
     )
 
     if usage_record is not None:
@@ -1074,55 +1231,70 @@ def calculate_job_result(
             usage_record.job_id
         )
 
-        result.tres_usage_in_ave = (
+        ave = parse_tres(
             usage_record.tres_usage_in_ave
         )
 
-        usage = parse_tres(
-            usage_record.tres_usage_in_ave
+        max_usage = parse_tres(
+            usage_record.tres_usage_in_max
         )
 
-        # CPU
-        if "cpu" in usage:
+        if "cpu" in ave:
 
             result.cpu_used_seconds = (
                 parse_elapsed(
-                    usage["cpu"]
+                    ave["cpu"]
                 )
             )
 
-        # Memory
-        if "mem" in usage:
+        if "mem" in max_usage:
 
             result.memory_used_bytes = (
                 parse_memory(
-                    usage["mem"]
+                    max_usage["mem"]
                 )
             )
 
-        # GPU utilization
-        for key in (
-            "gres/gpuutil",
-            "gpuutil",
+        if (
+            result.memory_used_bytes is None
+            and "mem" in ave
         ):
 
-            if key in usage:
-
-                result.gpu_efficiency_percent = (
-                    parse_gpu_percent(
-                        usage[key]
-                    )
+            result.memory_used_bytes = (
+                parse_memory(
+                    ave["mem"]
                 )
+            )
 
-                if (
-                    result.gpu_efficiency_percent
-                    is not None
-                ):
-                    break
+        for source in (
+            ave,
+            max_usage,
+        ):
 
-    # --------------------------------------------------------------
-    # Multiple application steps
-    # --------------------------------------------------------------
+            for key in (
+                "gres/gpuutil",
+                "gpuutil",
+            ):
+
+                if key in source:
+
+                    result.gpu_efficiency_percent = (
+                        parse_gpu_percent(
+                            source[key]
+                        )
+                    )
+
+                    if (
+                        result.gpu_efficiency_percent
+                        is not None
+                    ):
+                        break
+
+            if (
+                result.gpu_efficiency_percent
+                is not None
+            ):
+                break
 
     elif application_steps:
 
@@ -1138,10 +1310,7 @@ def calculate_job_result(
             "multiple-steps"
         )
 
-    # --------------------------------------------------------------
     # CPU efficiency
-    # --------------------------------------------------------------
-
     if (
         result.cpu_used_seconds is not None
         and result.cpus is not None
@@ -1151,18 +1320,17 @@ def calculate_job_result(
     ):
 
         result.cpu_efficiency_percent = (
-            result.cpu_used_seconds
-            / (
-                result.cpus
-                * result.elapsed_seconds
+            cap_percent(
+                result.cpu_used_seconds
+                / (
+                    result.cpus
+                    * result.elapsed_seconds
+                )
+                * 100.0
             )
-            * 100.0
         )
 
-    # --------------------------------------------------------------
     # Memory efficiency
-    # --------------------------------------------------------------
-
     if (
         result.memory_used_bytes is not None
         and result.memory_bytes is not None
@@ -1170,14 +1338,12 @@ def calculate_job_result(
     ):
 
         result.memory_efficiency_percent = (
-            result.memory_used_bytes
-            / result.memory_bytes
-            * 100.0
+            cap_percent(
+                result.memory_used_bytes
+                / result.memory_bytes
+                * 100.0
+            )
         )
-
-    # --------------------------------------------------------------
-    # GPU efficiency
-    # --------------------------------------------------------------
 
     if (
         result.gpu_count is None
@@ -1190,7 +1356,999 @@ def calculate_job_result(
 
 
 # ================================================================
-# Retry
+# Recommendations
+# ================================================================
+
+def round_up(value, step):
+
+    if value <= 0:
+        return step
+
+    return int(
+        (
+            (value + step - 1)
+            // step
+        )
+        * step
+    )
+
+
+def recommend_cpu(result):
+
+    if (
+        result.cpus is None
+        or result.cpus <= 0
+    ):
+        return "-"
+
+    if result.cpu_efficiency_percent is None:
+
+        return format_number(
+            result.cpus
+        )
+
+    utilization = (
+        result.cpu_efficiency_percent
+        / 100.0
+    )
+
+    recommended = (
+        result.cpus
+        * utilization
+        * 1.25
+    )
+
+    minimum = (
+        result.cpus
+        * 0.25
+    )
+
+    recommended = max(
+        recommended,
+        minimum,
+        1,
+    )
+
+    recommended = round_up(
+        int(
+            recommended + 0.999
+        ),
+        4,
+    )
+
+    recommended = min(
+        recommended,
+        int(result.cpus),
+    )
+
+    return "%d cores" % recommended
+
+
+def recommend_gpu(result):
+
+    if (
+        result.gpu_count is None
+        or result.gpu_count <= 0
+    ):
+        return "-"
+
+    if result.gpu_efficiency_percent is None:
+
+        return "%s" % (
+            format_number(
+                result.gpu_count
+            )
+        )
+
+    count = int(
+        result.gpu_count
+    )
+
+    util = (
+        result.gpu_efficiency_percent
+    )
+
+    if util >= 60:
+
+        recommended = count
+
+    elif util >= 30:
+
+        recommended = max(
+            1,
+            int(
+                round(
+                    count * 0.75
+                )
+            ),
+        )
+
+    else:
+
+        recommended = max(
+            1,
+            int(
+                round(
+                    count * 0.50
+                )
+            ),
+        )
+
+    recommended = min(
+        recommended,
+        count,
+    )
+
+    gpu_type = ""
+
+    if result.gpu_types:
+
+        first = (
+            result.gpu_types
+            .split(",")[0]
+        )
+
+        if "=" in first:
+
+            gpu_type = first.split(
+                "=",
+                1,
+            )[0]
+
+    if gpu_type:
+
+        return "%d x %s" % (
+            recommended,
+            gpu_type,
+        )
+
+    return "%d GPU%s" % (
+        recommended,
+        "" if recommended == 1 else "s",
+    )
+
+
+def recommend_memory(result):
+
+    if result.memory_used_bytes is None:
+        return "-"
+
+    # 40% safety margin.
+    recommended = (
+        result.memory_used_bytes
+        * 1.40
+    )
+
+    gb = (
+        recommended
+        / (1024.0 ** 3)
+    )
+
+    if gb <= 8:
+        rounded = 8
+
+    elif gb <= 16:
+        rounded = 16
+
+    elif gb <= 32:
+        rounded = 32
+
+    elif gb <= 64:
+        rounded = 64
+
+    elif gb <= 128:
+        rounded = 128
+
+    elif gb <= 256:
+        rounded = 256
+
+    elif gb <= 512:
+        rounded = 512
+
+    elif gb <= 1024:
+        rounded = 1024
+
+    else:
+
+        rounded = round_up(
+            int(gb + 0.999),
+            128,
+        )
+
+    if result.memory_bytes is not None:
+
+        allocated_gb = (
+            result.memory_bytes
+            / (1024.0 ** 3)
+        )
+
+        rounded = min(
+            rounded,
+            int(
+                allocated_gb + 0.999
+            ),
+        )
+
+    return "%d GB" % rounded
+
+
+def recommend_walltime(result):
+
+    if result.elapsed_seconds is None:
+        return "-"
+
+    target = (
+        result.elapsed_seconds
+        * 1.25
+    )
+
+    minute = 60
+
+    if target <= 15 * minute:
+        increment = 5 * minute
+
+    elif target <= 60 * minute:
+        increment = 10 * minute
+
+    elif target <= 4 * 3600:
+        increment = 30 * minute
+
+    elif target <= 12 * 3600:
+        increment = 60 * minute
+
+    else:
+        increment = 2 * 3600
+
+    recommended = (
+        int(
+            (
+                target
+                + increment
+                - 1
+            )
+            // increment
+        )
+        * increment
+    )
+
+    recommended = max(
+        recommended,
+        int(
+            result.elapsed_seconds
+        ),
+    )
+
+    return format_short_duration(
+        recommended
+    )
+
+
+# ================================================================
+# Human-readable report
+# ================================================================
+
+def resource_name(result):
+
+    if result.gpu_types:
+
+        first = (
+            result.gpu_types
+            .split(",")[0]
+        )
+
+        if "=" in first:
+
+            return first.split(
+                "=",
+                1,
+            )[0]
+
+    return "GPU"
+
+
+def generate_report(result):
+
+    lines = []
+
+    lines.append(
+        "slurmsummary Job Report"
+    )
+
+    lines.append("")
+
+    job_line = (
+        "Job %s"
+        % result.job_id
+    )
+
+    if result.job_name:
+
+        job_line += (
+            "   jobname: %s"
+            % result.job_name
+        )
+
+    lines.append(job_line)
+
+    if result.user:
+
+        lines.append(
+            "User: %s"
+            % result.user
+        )
+
+    if result.partition:
+
+        lines.append(
+            "Partition: %s"
+            % result.partition
+        )
+
+    lines.append("")
+
+    lines.append(
+        "%-16s %-18s %-18s %s"
+        % (
+            "",
+            "Requested",
+            "Observed",
+            "Recommended",
+        )
+    )
+
+    lines.append("")
+
+    # GPU
+    if (
+        result.gpu_count is not None
+        and result.gpu_count > 0
+    ):
+
+        gpu_type = resource_name(
+            result
+        )
+
+        requested_gpu = (
+            "%s x %s"
+            % (
+                format_number(
+                    result.gpu_count
+                ),
+                gpu_type,
+            )
+        )
+
+        if (
+            result.gpu_efficiency_percent
+            is not None
+        ):
+
+            observed_gpu = (
+                "%.0f%% avg"
+                % result.gpu_efficiency_percent
+            )
+
+        else:
+
+            observed_gpu = (
+                "unavailable"
+            )
+
+        recommended_gpu = (
+            recommend_gpu(result)
+        )
+
+    else:
+
+        requested_gpu = "-"
+        observed_gpu = "-"
+        recommended_gpu = "-"
+
+    lines.append(
+        "%-16s %-18s %-18s %s"
+        % (
+            "GPU",
+            requested_gpu,
+            observed_gpu,
+            recommended_gpu,
+        )
+    )
+
+    # CPU
+    if result.cpus is not None:
+
+        requested_cpu = (
+            "%s cores"
+            % format_number(
+                result.cpus
+            )
+        )
+
+    else:
+
+        requested_cpu = "-"
+
+    if (
+        result.cpu_efficiency_percent
+        is not None
+    ):
+
+        observed_cpu = (
+            "%.0f%% avg"
+            % result.cpu_efficiency_percent
+        )
+
+    else:
+
+        observed_cpu = (
+            "unavailable"
+        )
+
+    lines.append(
+        "%-16s %-18s %-18s %s"
+        % (
+            "CPU",
+            requested_cpu,
+            observed_cpu,
+            recommend_cpu(result),
+        )
+    )
+
+    # Memory
+    requested_mem = (
+        format_memory_gb(
+            result.memory_bytes
+        )
+    )
+
+    if result.memory_used_bytes is not None:
+
+        observed_mem = (
+            "%s peak"
+            % format_memory_gb(
+                result.memory_used_bytes
+            )
+        )
+
+    else:
+
+        observed_mem = (
+            "unavailable"
+        )
+
+    lines.append(
+        "%-16s %-18s %-18s %s"
+        % (
+            "Memory",
+            requested_mem,
+            observed_mem,
+            recommend_memory(result),
+        )
+    )
+
+    # Walltime
+    if result.requested_seconds is not None:
+
+        requested_walltime = (
+            format_short_duration(
+                result.requested_seconds
+            )
+        )
+
+    else:
+
+        requested_walltime = "-"
+
+    if result.elapsed_seconds is not None:
+
+        observed_walltime = (
+            "%s actual"
+            % format_short_duration(
+                result.elapsed_seconds
+            )
+        )
+
+    else:
+
+        observed_walltime = (
+            "unavailable"
+        )
+
+    lines.append(
+        "%-16s %-18s %-18s %s"
+        % (
+            "Walltime",
+            requested_walltime,
+            observed_walltime,
+            recommend_walltime(result),
+        )
+    )
+
+    lines.append("")
+
+    return "\n".join(lines)
+
+
+# ================================================================
+# Email
+# ================================================================
+
+def get_email_content(result):
+
+    recipient = get_user_email(
+        result.user
+    )
+
+    subject = (
+        "Slurm Job %s Resource Report"
+        % result.job_id
+    )
+
+    body = generate_report(
+        result
+    )
+
+    return (
+        recipient,
+        subject,
+        body,
+    )
+
+
+def send_email(
+    recipient,
+    subject,
+    body,
+):
+
+    if not recipient:
+        return False
+
+    try:
+
+        proc = subprocess.Popen(
+            [
+                "mail",
+                "-s",
+                subject,
+                recipient,
+            ],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            universal_newlines=True,
+        )
+
+        stdout, stderr = proc.communicate(
+            body
+        )
+
+    except OSError as exc:
+
+        eprint(
+            "[WARN] Cannot execute mail: %s"
+            % exc
+        )
+
+        return False
+
+    if proc.returncode != 0:
+
+        eprint(
+            "[WARN] mail failed for %s: %s"
+            % (
+                recipient,
+                stderr.strip(),
+            )
+        )
+
+        return False
+
+    return True
+
+
+def preview_job_email(result):
+
+    (
+        recipient,
+        subject,
+        body,
+    ) = get_email_content(
+        result
+    )
+
+    print("")
+    print("=" * 72)
+    print("EMAIL PREVIEW")
+    print("=" * 72)
+    print("To: %s" % recipient)
+    print("Subject: %s" % subject)
+    print("")
+    print(body)
+    print("")
+    print("=" * 72)
+    print("EMAIL WAS NOT SENT")
+    print("=" * 72)
+    print("")
+
+
+def email_job_report(result):
+
+    (
+        recipient,
+        subject,
+        body,
+    ) = get_email_content(
+        result
+    )
+
+    eprint(
+        "[INFO] Sending job %s report to %s"
+        % (
+            result.job_id,
+            recipient,
+        )
+    )
+
+    return send_email(
+        recipient,
+        subject,
+        body,
+    )
+
+
+# ================================================================
+# Output
+# ================================================================
+
+def print_table(results):
+
+    if not results:
+
+        print("No jobs found.")
+        return
+
+    headers = [
+        "JobID",
+        "User",
+        "Partition",
+        "State",
+        "Elapsed",
+        "Requested",
+        "Default",
+        "MaxTime",
+        "Elap/Req",
+        "Elap/Def",
+        "Elap/Max",
+        "CPU",
+        "CPU Used",
+        "CPU Eff",
+        "Mem Alloc",
+        "Mem Used",
+        "Mem Eff",
+        "GPU",
+        "GPU Eff",
+        "# of Steps",
+        "Job Step",
+    ]
+
+    rows = []
+
+    for result in results:
+
+        rows.append([
+            result.job_id,
+            result.user,
+            result.partition,
+            result.state,
+            result.elapsed,
+            (
+                result.requested_time
+                if result.requested_seconds
+                is not None
+                else "-"
+            ),
+            result.partition_default_time or "-",
+            result.partition_max_time or "-",
+            format_percent(
+                result.elapsed_requested_percent
+            ),
+            format_percent(
+                result.elapsed_default_percent
+            ),
+            format_percent(
+                result.elapsed_max_percent
+            ),
+            format_number(
+                result.cpus
+            ),
+            (
+                "%.0fs"
+                % result.cpu_used_seconds
+                if result.cpu_used_seconds
+                is not None
+                else "-"
+            ),
+            format_percent(
+                result.cpu_efficiency_percent
+            ),
+            format_bytes(
+                result.memory_bytes
+            ),
+            format_bytes(
+                result.memory_used_bytes
+            ),
+            format_percent(
+                result.memory_efficiency_percent
+            ),
+            format_number(
+                result.gpu_count
+            ),
+            format_percent(
+                result.gpu_efficiency_percent
+            ),
+            str(
+                result.step_count
+            ),
+            result.job_step or "-",
+        ])
+
+    widths = []
+
+    for i, header in enumerate(
+        headers
+    ):
+
+        width = len(header)
+
+        for row in rows:
+
+            width = max(
+                width,
+                len(str(row[i]))
+            )
+
+        widths.append(width)
+
+    print(
+        "  ".join(
+            headers[i].ljust(
+                widths[i]
+            )
+            for i in range(
+                len(headers)
+            )
+        )
+    )
+
+    print(
+        "  ".join(
+            "-" * widths[i]
+            for i in range(
+                len(headers)
+            )
+        )
+    )
+
+    for row in rows:
+
+        print(
+            "  ".join(
+                str(row[i]).ljust(
+                    widths[i]
+                )
+                for i in range(
+                    len(headers)
+                )
+            )
+        )
+
+
+def result_dict(result):
+
+    return {
+        "JobID":
+            result.job_id,
+
+        "JobName":
+            result.job_name,
+
+        "User":
+            result.user,
+
+        "Partition":
+            result.partition,
+
+        "State":
+            result.state,
+
+        "Elapsed":
+            result.elapsed,
+
+        "Requested":
+            (
+                result.requested_time
+                if result.requested_seconds
+                is not None
+                else "-"
+            ),
+
+        "DefaultTime":
+            result.partition_default_time,
+
+        "MaxTime":
+            result.partition_max_time,
+
+        "Elapsed/Requested":
+            format_percent(
+                result.elapsed_requested_percent
+            ),
+
+        "Elapsed/Default":
+            format_percent(
+                result.elapsed_default_percent
+            ),
+
+        "Elapsed/Max":
+            format_percent(
+                result.elapsed_max_percent
+            ),
+
+        "CPUs":
+            result.cpus,
+
+        "CPUUsedSeconds":
+            result.cpu_used_seconds,
+
+        "CPUEff":
+            format_percent(
+                result.cpu_efficiency_percent
+            ),
+
+        "MemAllocated":
+            format_bytes(
+                result.memory_bytes
+            ),
+
+        "MemPeak":
+            format_bytes(
+                result.memory_used_bytes
+            ),
+
+        "MemEff":
+            format_percent(
+                result.memory_efficiency_percent
+            ),
+
+        "GPUs":
+            result.gpu_count,
+
+        "GPUTypes":
+            result.gpu_types,
+
+        "GPUEff":
+            format_percent(
+                result.gpu_efficiency_percent
+            ),
+
+        "# of Steps":
+            result.step_count,
+
+        "JobStep":
+            result.job_step,
+    }
+
+
+def output_results(
+    results,
+    output_format,
+    output_file,
+):
+
+    if output_format == "table":
+
+        if output_file:
+
+            with open(
+                output_file,
+                "w"
+            ) as output:
+
+                old_stdout = sys.stdout
+
+                try:
+
+                    sys.stdout = output
+
+                    print_table(
+                        results
+                    )
+
+                finally:
+
+                    sys.stdout = old_stdout
+
+        else:
+
+            print_table(
+                results
+            )
+
+        return
+
+    if output_format == "report":
+
+        text = "\n\n".join(
+            generate_report(result)
+            for result in results
+        )
+
+    else:
+
+        data = [
+            result_dict(result)
+            for result in results
+        ]
+
+        if output_format == "json":
+
+            text = json.dumps(
+                data,
+                indent=2,
+            )
+
+        elif output_format == "csv":
+
+            output = io.StringIO()
+
+            if data:
+
+                fields = list(
+                    data[0].keys()
+                )
+
+                writer = csv.DictWriter(
+                    output,
+                    fieldnames=fields,
+                )
+
+                writer.writeheader()
+                writer.writerows(data)
+
+            text = output.getvalue()
+
+        else:
+
+            raise ValueError(
+                "Unknown format: %s"
+                % output_format
+            )
+
+    if output_file:
+
+        with open(
+            output_file,
+            "w"
+        ) as output:
+
+            output.write(text)
+
+            if not text.endswith(
+                "\n"
+            ):
+
+                output.write("\n")
+
+    else:
+
+        print(
+            text,
+            end="",
+        )
+
+
+# ================================================================
+# Processing
 # ================================================================
 
 def get_job_with_retry(
@@ -1222,7 +2380,7 @@ def get_job_with_retry(
 
         job = find_job_record(
             records,
-            job_id
+            job_id,
         )
 
         if job:
@@ -1244,438 +2402,6 @@ def get_job_with_retry(
     )
 
 
-# ================================================================
-# Output
-# ================================================================
-
-def result_dict(result):
-
-    return {
-        "JobID": result.job_id,
-        "User": result.user,
-        "Partition": result.partition,
-        "State": result.state,
-        "Elapsed": result.elapsed,
-
-        "Requested": (
-            result.requested_time
-            if result.requested_seconds is not None
-            else "-"
-        ),
-
-        "DefaultTime": (
-            result.partition_default_time
-        ),
-
-        "MaxTime": (
-            result.partition_max_time
-        ),
-
-        "Elapsed/Requested": (
-            format_percent(
-                result.elapsed_requested_percent
-            )
-        ),
-
-        "Elapsed/Default": (
-            format_percent(
-                result.elapsed_default_percent
-            )
-        ),
-
-        "Elapsed/Max": (
-            format_percent(
-                result.elapsed_max_percent
-            )
-        ),
-
-        "CPUs": result.cpus,
-
-        "CPUUsedSeconds": (
-            result.cpu_used_seconds
-        ),
-
-        "CPUEff": (
-            format_percent(
-                result.cpu_efficiency_percent
-            )
-        ),
-
-        "MemAllocated": format_bytes(
-            result.memory_bytes
-        ),
-
-        "MemUsed": format_bytes(
-            result.memory_used_bytes
-        ),
-
-        "MemEff": format_percent(
-            result.memory_efficiency_percent
-        ),
-
-        "GPUs": result.gpu_count,
-
-        "GPUTypes": result.gpu_types,
-
-        "GPUEff": format_percent(
-            result.gpu_efficiency_percent
-        ),
-
-        "# of Steps": result.step_count,
-
-        "JobStep": result.job_step,
-    }
-
-
-def print_table(results):
-
-    if not results:
-
-        print("No jobs found.")
-        return
-
-    headers = [
-        "JobID",
-        "User",
-        "Partition",
-        "State",
-        "Elapsed",
-        "Requested",
-        "Default",
-        "MaxTime",
-        "Elap/Req",
-        "Elap/Def",
-        "Elap/Max",
-        "CPU",
-        "CPU Used",
-        "CPU Eff",
-        "Mem Alloc",
-        "Mem Used",
-        "Mem Eff",
-        "GPUs",
-        "GPU Eff",
-        "# of Steps",
-        "Job Step",
-    ]
-
-    rows = []
-
-    for result in results:
-
-        rows.append([
-            result.job_id,
-            result.user,
-            result.partition,
-            result.state,
-            result.elapsed,
-
-            (
-                result.requested_time
-                if result.requested_seconds
-                is not None
-                else "-"
-            ),
-
-            (
-                result.partition_default_time
-                or "-"
-            ),
-
-            (
-                result.partition_max_time
-                or "-"
-            ),
-
-            format_percent(
-                result.elapsed_requested_percent
-            ),
-
-            format_percent(
-                result.elapsed_default_percent
-            ),
-
-            format_percent(
-                result.elapsed_max_percent
-            ),
-
-            format_number(
-                result.cpus
-            ),
-
-            (
-                "%.0fs"
-                % result.cpu_used_seconds
-                if result.cpu_used_seconds
-                is not None
-                else "-"
-            ),
-
-            format_percent(
-                result.cpu_efficiency_percent
-            ),
-
-            format_bytes(
-                result.memory_bytes
-            ),
-
-            format_bytes(
-                result.memory_used_bytes
-            ),
-
-            format_percent(
-                result.memory_efficiency_percent
-            ),
-
-            format_number(
-                result.gpu_count
-            ),
-
-            format_percent(
-                result.gpu_efficiency_percent
-            ),
-
-            str(
-                result.step_count
-            ),
-
-            result.job_step or "-",
-        ])
-
-    widths = []
-
-    for i, header in enumerate(headers):
-
-        width = len(header)
-
-        for row in rows:
-
-            width = max(
-                width,
-                len(str(row[i]))
-            )
-
-        widths.append(width)
-
-    print(
-        "  ".join(
-            headers[i].ljust(
-                widths[i]
-            )
-            for i in range(
-                len(headers)
-            )
-        )
-    )
-
-    print(
-        "  ".join(
-            "-" * widths[i]
-            for i in range(
-                len(headers)
-            )
-        )
-    )
-
-    for row in rows:
-
-        print(
-            "  ".join(
-                str(row[i]).ljust(
-                    widths[i]
-                )
-                for i in range(
-                    len(headers)
-                )
-            )
-        )
-
-
-def print_steps(
-    records,
-    job_id,
-):
-
-    steps = find_steps(
-        records,
-        job_id
-    )
-
-    if not steps:
-        return
-
-    print()
-    print(
-        "Steps for %s:"
-        % job_id
-    )
-
-    headers = [
-        "Step",
-        "State",
-        "Elapsed",
-        "AllocTRES",
-        "CPU Ave",
-        "Mem Ave",
-    ]
-
-    rows = []
-
-    for record in steps:
-
-        usage = parse_tres(
-            record.tres_usage_in_ave
-        )
-
-        rows.append([
-            record.job_id,
-            record.state,
-            record.elapsed,
-            record.alloc_tres,
-            usage.get("cpu", ""),
-            usage.get("mem", ""),
-        ])
-
-    widths = []
-
-    for i, header in enumerate(headers):
-
-        width = len(header)
-
-        for row in rows:
-
-            width = max(
-                width,
-                len(str(row[i]))
-            )
-
-        widths.append(width)
-
-    print(
-        "  ".join(
-            headers[i].ljust(
-                widths[i]
-            )
-            for i in range(
-                len(headers)
-            )
-        )
-    )
-
-    print(
-        "  ".join(
-            "-" * widths[i]
-            for i in range(
-                len(headers)
-            )
-        )
-    )
-
-    for row in rows:
-
-        print(
-            "  ".join(
-                str(row[i]).ljust(
-                    widths[i]
-                )
-                for i in range(
-                    len(headers)
-                )
-            )
-        )
-
-
-def output_results(
-    results,
-    output_format,
-    output_file,
-):
-
-    if output_format == "table":
-
-        if output_file:
-
-            with open(
-                output_file,
-                "w"
-            ) as output:
-
-                old_stdout = sys.stdout
-
-                try:
-
-                    sys.stdout = output
-                    print_table(results)
-
-                finally:
-
-                    sys.stdout = old_stdout
-
-        else:
-
-            print_table(results)
-
-        return
-
-    data = [
-        result_dict(result)
-        for result in results
-    ]
-
-    if output_format == "json":
-
-        text = json.dumps(
-            data,
-            indent=2
-        )
-
-    elif output_format == "csv":
-
-        output = io.StringIO()
-
-        if data:
-
-            fields = list(
-                data[0].keys()
-            )
-
-            writer = csv.DictWriter(
-                output,
-                fieldnames=fields
-            )
-
-            writer.writeheader()
-            writer.writerows(data)
-
-        text = output.getvalue()
-
-    else:
-
-        raise ValueError(
-            "Unknown format: %s"
-            % output_format
-        )
-
-    if output_file:
-
-        with open(
-            output_file,
-            "w"
-        ) as output:
-
-            output.write(text)
-
-    else:
-
-        print(
-            text,
-            end=""
-        )
-
-
-# ================================================================
-# Job list
-# ================================================================
-
 def parse_job_list(values):
 
     result = []
@@ -1691,7 +2417,9 @@ def parse_job_list(values):
                 and job_id not in result
             ):
 
-                result.append(job_id)
+                result.append(
+                    job_id
+                )
 
     return result
 
@@ -1728,22 +2456,29 @@ def process_jobs(
 
         result = calculate_job_result(
             job,
-            records
+            records,
         )
 
-        results.append(result)
+        results.append(
+            result
+        )
 
-        if args.steps:
+        if args.email_preview:
 
-            print_steps(
-                records,
-                job.job_id
+            preview_job_email(
+                result
+            )
+
+        elif args.email:
+
+            email_job_report(
+                result
             )
 
     output_results(
         results,
         args.format,
-        args.output
+        args.output,
     )
 
 
@@ -1798,12 +2533,12 @@ def historical_mode(args):
 
     process_jobs(
         job_ids,
-        args
+        args,
     )
 
 
 # ================================================================
-# slurmctld log monitoring
+# slurmctld live monitoring
 # ================================================================
 
 JOB_COMPLETE_RE = re.compile(
@@ -1841,6 +2576,7 @@ def follow_file(filename):
                     if line:
 
                         yield line
+
                         continue
 
                     time.sleep(
@@ -1849,9 +2585,11 @@ def follow_file(filename):
 
                     try:
 
-                        new_inode = os.stat(
-                            filename
-                        ).st_ino
+                        new_inode = (
+                            os.stat(
+                                filename
+                            ).st_ino
+                        )
 
                         if new_inode != inode:
                             break
@@ -1863,7 +2601,8 @@ def follow_file(filename):
         except IOError:
 
             eprint(
-                "[WARN] Cannot open %s; waiting..."
+                "[WARN] Cannot open %s; "
+                "waiting..."
                 % filename
             )
 
@@ -1891,30 +2630,16 @@ def live_mode(args):
             continue
 
         job_id = match.group(1)
-        numeric_id = match.group(2)
 
         if job_id in seen:
             continue
 
         seen.add(job_id)
 
-        if numeric_id:
-
-            eprint(
-                "[INFO] Job completed: %s "
-                "(numeric=%s)"
-                % (
-                    job_id,
-                    numeric_id,
-                )
-            )
-
-        else:
-
-            eprint(
-                "[INFO] Job completed: %s"
-                % job_id
-            )
+        eprint(
+            "[INFO] Job completed: %s"
+            % job_id
+        )
 
         job, records = get_job_with_retry(
             job_id,
@@ -1934,22 +2659,28 @@ def live_mode(args):
 
         result = calculate_job_result(
             job,
-            records
+            records,
         )
+
+        if args.email_preview:
+
+            preview_job_email(
+                result
+            )
+
+        elif args.email:
+
+            email_job_report(
+                result
+            )
 
         output_results(
             [result],
             args.format,
-            args.output
+            args.output,
         )
 
-        if args.steps:
-
-            print_steps(
-                records,
-                job.job_id
-            )
-
+        # Prevent unlimited growth.
         if len(seen) > 100000:
 
             seen.clear()
@@ -1964,7 +2695,8 @@ def build_parser():
     parser = argparse.ArgumentParser(
         description=(
             "Slurm job CPU/memory/GPU "
-            "efficiency monitor."
+            "efficiency monitor and "
+            "resource recommendation tool."
         )
     )
 
@@ -1984,27 +2716,21 @@ def build_parser():
         "-S",
         "--start",
         metavar="TIME",
-        help=(
-            "Historical query start time."
-        ),
+        help="Historical query start time.",
     )
 
     parser.add_argument(
         "-E",
         "--end",
         metavar="TIME",
-        help=(
-            "Historical query end time."
-        ),
+        help="Historical query end time.",
     )
 
     parser.add_argument(
         "-a",
         "--allusers",
         action="store_true",
-        help=(
-            "Query jobs from all users."
-        ),
+        help="Query jobs from all users.",
     )
 
     parser.add_argument(
@@ -2012,18 +2738,19 @@ def build_parser():
         "--user",
         action="append",
         help=(
-            "Restrict historical query to "
-            "user. Can be specified multiple times."
+            "Restrict historical query to user. "
+            "Can be specified multiple times."
         ),
     )
 
     parser.add_argument(
         "-l",
         "--log",
-        default="/var/log/slurmctld.log",
+        default=DEFAULT_LOG,
         help=(
             "slurmctld log file. "
-            "Default: /var/log/slurmctld.log"
+            "Default: %s"
+            % DEFAULT_LOG
         ),
     )
 
@@ -2039,16 +2766,36 @@ def build_parser():
             "table",
             "csv",
             "json",
+            "report",
         ],
         default="table",
         help="Output format.",
     )
 
     parser.add_argument(
-        "--steps",
+        "--report",
+        action="store_true",
+        help="Shortcut for --format report.",
+    )
+
+    # Email options are mutually exclusive.
+    email_group = parser.add_mutually_exclusive_group()
+
+    email_group.add_argument(
+        "--email",
         action="store_true",
         help=(
-            "Display all job steps."
+            "Send a resource report email "
+            "to the user of each job."
+        ),
+    )
+
+    email_group.add_argument(
+        "--email-preview",
+        action="store_true",
+        help=(
+            "Show the email recipient, subject, "
+            "and body without sending it."
         ),
     )
 
@@ -2081,10 +2828,11 @@ def main():
 
     args = parser.parse_args()
 
-    # --------------------------------------------------------------
-    # Explicit jobs
-    # --------------------------------------------------------------
+    if args.report:
 
+        args.format = "report"
+
+    # Explicit job IDs
     if args.jobs:
 
         job_ids = parse_job_list(
@@ -2099,15 +2847,12 @@ def main():
 
         process_jobs(
             job_ids,
-            args
+            args,
         )
 
         return
 
-    # --------------------------------------------------------------
     # Historical query
-    # --------------------------------------------------------------
-
     if args.start or args.end:
 
         if not args.start:
@@ -2116,15 +2861,16 @@ def main():
                 "-E/--end requires -S/--start"
             )
 
-        historical_mode(args)
+        historical_mode(
+            args
+        )
 
         return
 
-    # --------------------------------------------------------------
-    # Live monitoring
-    # --------------------------------------------------------------
-
-    live_mode(args)
+    # Default: live monitoring
+    live_mode(
+        args
+    )
 
 
 if __name__ == "__main__":
