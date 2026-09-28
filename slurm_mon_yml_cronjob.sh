@@ -2,6 +2,8 @@
 #
 set -u
 #
+#Crontab job
+#*/2 * * * * /xxx/SlurmMon/clusters_yaml/slurm_mon_yml_cronjob.sh
 #
 # Prevent multiple instances from running simultaneously.
 #
