@@ -2,6 +2,18 @@
 #
 set -u
 #
+#
+# Prevent multiple instances from running simultaneously.
+#
+LOCKFILE="/tmp/xxx_stats.lock"
+#
+exec 9>"$LOCKFILE"
+if ! flock -n 9; then
+    echo "ERROR: Another instance is already running; exiting." >&2
+    exit 1
+fi
+#
+#
 export PATH="/cm/shared/apps/slurm/current/bin:$PATH"
 export LD_LIBRARY_PATH="/cm/shared/apps/slurm/current/lib64:/cm/shared/apps/slurm/current/lib64/slurm:${LD_LIBRARY_PATH:-}"
 export SLURM_CONF="/cm/shared/apps/slurm/var/etc/slurm/slurm.conf"
