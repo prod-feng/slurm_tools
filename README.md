@@ -84,4 +84,61 @@ JOBID      USER         NODE             GPUS           AVG     MIN     MAX  IDL
 
 You can use the --dry-run mode to run it interactively, not triggering to track the jobs states.
 
+## slurm_motd.sh
+
+Bash script to show last or specific job's HPC resource utilization efficiency.
+
+```
+./slurm_motd.sh
+
+╭─ Last Slurm job ─────────────────────────────────
+│ Job:       50529
+│ Partition: gpu_short
+│ State:     TIMEOUT
+│
+│ Time
+│   Time limit:   00:02:00
+│   Runtime:      00:02:08
+│   Usage:        106.7%
+│
+│ CPU
+│   Allocated:    1 core(s)
+│   Used:         00:00.086
+│   Efficiency:   0.1%
+│
+│ Memory
+│   Allocated:    18G
+│   Peak:         3780.0 KB
+│   Efficiency:   0.02%
+│
+│ Disk I/O
+│   Read:         3.04M
+│   Write:        0.00M
+╰──────────────────────────────────────────────────
+```
+
+Or
+
+```
+./slurm_motd.sh --format=keyvalue
+jobid=50529
+partition=gpu_short
+node=gpu011
+state=TIMEOUT
+runtime=00:02:08
+timelimit=00:02:00
+time_efficiency=106.7
+cpu_allocated=1
+cpu_used=00:00.086
+cpu_efficiency=0.1
+memory_allocated=18G
+memory_peak=3780K
+memory_efficiency=0.02
+gpu_type=N/A
+gpu_allocated=0
+gpu_utilization=N/A
+gpu_memory_used=N/A
+disk_read=3.04M
+disk_write=0.00M
+```
 
