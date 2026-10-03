@@ -1,6 +1,6 @@
 ## slurm_efficiency_motd.sh
 
-Copy to  /etc/profile.d/ folder. Print's last finished job's metrics to users after they SSH login.
+Copy to  /etc/profile.d/ folder. Print's last finished job's metrics to users after they SSH login, as extra to MOTD.
 
 ```
 ╭─ Last Slurm job ─────────────────────────────────
