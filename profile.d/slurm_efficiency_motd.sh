@@ -693,7 +693,18 @@ _slurm_efficiency_motd() {
                 sed -E 's/Gres=gpu:([^: ]+).*/\1/'
         )
 
+    case "$gpu_type" in
 
+        6000)
+            gpu_type="RTX PRO 6000"
+            ;;
+
+        *)
+            gpu_type="$gpu_type"
+            ;;
+
+    esac
+    
         [[ -z "$gpu_type" ]] && gpu_type="N/A"
 
     fi
