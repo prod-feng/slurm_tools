@@ -8,7 +8,7 @@ _slurm_efficiency_motd() {
     local SACCT="/cm/shared/apps/slurm/current/bin/sacct"
     local SCONTROL="/cm/shared/apps/slurm/current/bin/scontrol"
     local requested_jobid="" jobid="" start_from
-    local parent_line="" batch_line="" fallback_line=""
+    local parent_line="" batch_line="" fallback_line="" extern_line=""
     local p_jobid partition node state elapsed timelimit timelimit_raw cpus req_tres alloc_tres reqmem
     local step_id step_state step_cpus step_alloc_tres tres_ave totalcpu maxrss diskread diskwrite
     local alloc_cpu alloc_mem alloc_gpu gpu_util="N/A" gpu_mem_used="N/A"
@@ -76,6 +76,11 @@ _slurm_efficiency_motd() {
             zero_alloc_tres="$row_alloc_tres"; zero_tres_ave="$row_tres_ave"; zero_tres_max="$row_tres_max"
             zero_totalcpu="$row_totalcpu"; zero_maxrss="$row_maxrss"
             zero_diskread="$row_diskread"; zero_diskwrite="$row_diskwrite"
+        elif [[ "$row_id" == "$jobid.extern" ]]; then
+            extern_line="$row_id"
+            extern_alloc_tres="$row_alloc_tres"; extern_tres_ave="$row_tres_ave"; extern_tres_max="$row_tres_max"
+            extern_totalcpu="$row_totalcpu"; extern_maxrss="$row_maxrss"
+            extern_diskread="$row_diskread"; extern_diskwrite="$row_diskwrite"
         fi
     done <<< "$accounting"
 
@@ -83,17 +88,26 @@ _slurm_efficiency_motd() {
         echo "ERROR: parent job $jobid was not found in Slurm accounting." >&2; return 1;
     }
 
-    # Prefer .batch accounting (as in Slurm 21.08); fall back to .0 if present.
+    # Prefer .batch usage, then .0, and use .extern only when neither exists.
+    # Some interactive jobs have no .batch/.0 row and expose only .extern.
     if [[ -n "$batch_line" ]]; then
         tres_ave="$batch_tres_ave"; tres_max="$batch_tres_max"; totalcpu="$batch_totalcpu"; maxrss="$batch_maxrss"
         diskread="$batch_diskread"; diskwrite="$batch_diskwrite"
         step_alloc_tres="$batch_alloc_tres"
+        usage_step="$batch_line"
     elif [[ -n "$fallback_line" ]]; then
         tres_ave="$zero_tres_ave"; tres_max="$zero_tres_max"; totalcpu="$zero_totalcpu"; maxrss="$zero_maxrss"
         diskread="$zero_diskread"; diskwrite="$zero_diskwrite"
         step_alloc_tres="$zero_alloc_tres"
+        usage_step="$fallback_line"
+    elif [[ -n "$extern_line" ]]; then
+        tres_ave="$extern_tres_ave"; tres_max="$extern_tres_max"; totalcpu="$extern_totalcpu"; maxrss="$extern_maxrss"
+        diskread="$extern_diskread"; diskwrite="$extern_diskwrite"
+        step_alloc_tres="$extern_alloc_tres"
+        usage_step="$extern_line"
     else
         tres_ave=""; tres_max=""; totalcpu=""; maxrss=""; diskread=""; diskwrite=""; step_alloc_tres=""
+        usage_step=""
     fi
 
     get_tres_value() {
@@ -168,8 +182,10 @@ _slurm_efficiency_motd() {
     fi
 
     cpu_sec=$(slurm_time_seconds "$totalcpu")
+    # A reported zero is still a numeric accounting value, so its calculated
+    # efficiency is 0.0%. Missing/invalid values remain N/A.
     if [[ "$alloc_cpu" =~ ^[0-9]+$ ]] && (( alloc_cpu > 0 )) &&
-       awk -v r="$runtime_sec" -v c="$cpu_sec" 'BEGIN{exit !(r>0 && c>0)}'; then
+       awk -v r="$runtime_sec" -v c="$cpu_sec" 'BEGIN{exit !(r>0 && c>=0)}'; then
         cpu_eff=$(awk -v c="$cpu_sec" -v r="$runtime_sec" -v n="$alloc_cpu" 'BEGIN{printf "%.1f",100*c/(r*n)}')
     fi
 
@@ -180,7 +196,7 @@ _slurm_efficiency_motd() {
     fi
     mem_alloc_mb=$(memory_to_mb "$alloc_mem")
     mem_used_mb=$(memory_to_mb "$maxrss")
-    if awk -v a="$mem_alloc_mb" -v u="$mem_used_mb" 'BEGIN{exit !(a>0 && u>0)}'; then
+    if awk -v a="$mem_alloc_mb" -v u="$mem_used_mb" 'BEGIN{exit !(a>0 && u>=0)}'; then
         mem_eff=$(awk -v a="$mem_alloc_mb" -v u="$mem_used_mb" 'BEGIN{printf "%.1f",100*u/a}')
     fi
 
