@@ -209,7 +209,11 @@ _slurm_efficiency_motd() {
            awk -v n="$alloc_gpu" 'BEGIN{exit !(n>0)}'; then
             gpu_util=$(awk -v u="$raw_gpu_util" -v n="$alloc_gpu" 'BEGIN{printf "%.1f",u/n}')
         fi
-        [[ -n "$raw_gpu_mem" && "$raw_gpu_mem" != "0" ]] && gpu_mem_used="$raw_gpu_mem"
+        # A numeric zero is a recorded value and should display as 0.0 MB;
+        # only missing or non-numeric accounting values remain N/A.
+        if [[ "$raw_gpu_mem" =~ ^[0-9]+([.][0-9]+)?([KkMmGgTt]?)$ ]]; then
+            gpu_mem_used="$raw_gpu_mem"
+        fi
         if [[ -n "$node" && -x "$SCONTROL" ]]; then
             node_info=$("$SCONTROL" show node "$node" 2>/dev/null)
             if [[ "$node_info" =~ Gres=gpu:([^:,[:space:]]+) ]]; then
