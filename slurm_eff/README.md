@@ -1,3 +1,5 @@
+<img width="1005" height="427" alt="Screenshot 2026-10-19 at 4 19 28 PM" src="https://github.com/user-attachments/assets/31fddb4d-815b-4329-bb95-b1e255c127d0" />
+
 # Slurm Resource Efficiency Report
 
 A lightweight standalone Slurm resource-efficiency report generator and
