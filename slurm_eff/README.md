@@ -237,6 +237,3 @@ metadata, and resource usage. Handle them according to your site's data
 policies. The viewer processes the selected report in the browser and
 does not require uploading it to an application backend.
 
-## License
-
-Add the license used by your repository here.
