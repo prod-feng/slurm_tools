@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Slurm Resource Efficiency Report</title>
+<style>
+:root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#172033;background:#f4f7fb;font-size:14px}*{box-sizing:border-box}body{margin:0}.wrap{max-width:1600px;margin:0 auto;padding:24px}h1{margin:0 0 6px;font-size:26px}.sub{color:#5d687b;margin-bottom:20px}.panel{background:white;border:1px solid #dce3ed;border-radius:12px;padding:18px;margin-bottom:16px;box-shadow:0 2px 8px #1720330a}.toolbar{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.filebox{border:2px dashed #aab8ca;border-radius:10px;padding:16px;flex:1;min-width:260px;background:#fafcff}.filebox.drag{border-color:#1769d2;background:#edf5ff}.filebox input{max-width:100%}button,.button{border:1px solid #c7d2e2;background:#fff;color:#26364c;padding:8px 12px;border-radius:7px;cursor:pointer;font:inherit}button:hover{background:#edf4fc}button.primary{background:#1769d2;color:#fff;border-color:#1769d2}button.primary:hover{background:#0e55b5}button:disabled{opacity:.45;cursor:not-allowed}.hint{color:#6b778a;font-size:12px;margin-top:7px}.error{color:#a32323;white-space:pre-wrap;margin-top:12px}.meta{display:flex;gap:18px;flex-wrap:wrap;color:#5c687a;font-size:13px}.cards{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:12px;margin:16px 0}.metric{background:#f7f9fc;border:1px solid #e0e7f0;border-radius:10px;padding:14px}.metric .label{font-size:12px;color:#66748a}.metric .value{font-size:23px;font-weight:700;margin-top:4px;font-variant-numeric:tabular-nums}.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}.controls input,.controls select{padding:8px 10px;border:1px solid #c7d2e2;border-radius:7px;background:white;font:inherit}.controls input{min-width:220px;flex:1}.controls select{min-width:150px;max-width:240px}.column-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 12px}.column-picker{position:relative}.column-picker summary{cursor:pointer;list-style:none;border:1px solid #c7d2e2;background:#fff;padding:8px 12px;border-radius:7px}.column-picker summary::-webkit-details-marker{display:none}.column-options{position:absolute;z-index:5;top:calc(100% + 5px);left:0;background:#fff;border:1px solid #c7d2e2;border-radius:9px;box-shadow:0 8px 24px #17203320;padding:12px;min-width:240px;max-height:320px;overflow:auto;display:grid;gap:8px}.column-options label{display:flex;align-items:center;gap:8px;white-space:nowrap}.sort-button{border:0;background:transparent;padding:0;color:inherit;text-transform:inherit;letter-spacing:inherit;font:inherit;font-weight:700;cursor:pointer;white-space:nowrap}.sort-button:hover{color:#1769d2;background:transparent}.sort-indicator{display:inline-block;margin-left:4px;color:#1769d2}.filter-note{font-size:12px;color:#69778c;margin:0 0 10px}.crumb{color:#64748b;font-size:12px;margin-top:4px}.table-wrap{overflow:auto;border:1px solid #dce3ed;border-radius:9px}table{border-collapse:separate;border-spacing:0;width:100%;min-width:1200px;background:#fff}thead th{position:sticky;top:0;background:#eef3f9;color:#40516a;font-size:12px;text-transform:uppercase;letter-spacing:.035em;white-space:nowrap;z-index:1}th,td{padding:10px 12px;border-bottom:1px solid #e7ecf3;text-align:right;white-space:nowrap}th:first-child,td:first-child{text-align:left;min-width:300px}tbody tr:hover{background:#f7faff}.namecell{display:flex;align-items:center;gap:7px}.toggle{width:24px;height:24px;padding:0;border:0;background:transparent;color:#42536b;font-size:16px}.indent{display:inline-block;flex:none}.kind{display:inline-block;font-size:10px;line-height:1;padding:4px 6px;border-radius:5px;background:#e9eef6;color:#47566c;font-weight:700}.kind.department{background:#dbeafe;color:#1d4ed8}.kind.pi{background:#dcfce7;color:#166534}.kind.project{background:#fef3c7;color:#92400e}.num{font-variant-numeric:tabular-nums}.muted{color:#8994a5}.pct{display:inline-block;min-width:55px}.bar{height:5px;background:#e6ebf2;border-radius:8px;overflow:hidden;margin-top:4px}.bar span{display:block;height:100%;background:#3b82f6}.empty{text-align:center!important;padding:28px;color:#69778c}.footer{font-size:12px;color:#69778c;margin-top:12px;line-height:1.5}.hidden{display:none!important}@media(max-width:800px){.wrap{padding:12px}h1{font-size:22px}.cards{grid-template-columns:repeat(2,minmax(120px,1fr))}.panel{padding:12px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Slurm Resource Efficiency</h1>
+  <div class="sub">A local, browser-only viewer for the YAML report produced by <code>standalone_resource_efficiency.py</code>.</div>
+  <section class="panel">
+    <div class="toolbar">
+      <div class="filebox" id="dropzone"><strong>Open a YAML report</strong><div style="margin:8px 0"><input id="file" type="file" accept=".yaml,.yml,.txt,text/plain,application/yaml"></div><div class="hint">Choose the report file or drag it here. Your file is processed in this browser and is not uploaded.</div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button id="expandAll" disabled>Expand all</button><button id="collapseAll" disabled>Collapse all</button><button id="exportCsv" disabled>Export visible rows to CSV</button></div>
+    </div>
+    <div id="error" class="error"></div>
+  </section>
+  <section id="report" class="hidden">
+    <section class="panel">
+      <div class="meta"><span><strong>Cluster:</strong> <span id="cluster">—</span></span><span><strong>Period:</strong> <span id="period">—</span></span><span><strong>Generated:</strong> <span id="generated">—</span></span></div>
+      <div class="cards">
+        <div class="metric"><div class="label">Included jobs</div><div class="value" id="jobs">—</div></div>
+        <div class="metric"><div class="label">CPU allocation-hours</div><div class="value" id="cpuHours">—</div></div>
+        <div class="metric"><div class="label">GPU allocation-hours</div><div class="value" id="gpuHours">—</div></div>
+        <div class="metric"><div class="label">Memory GB-hours</div><div class="value" id="memHours">—</div></div>
+      </div>
+    </section>
+    <section class="panel">
+      <div class="controls">
+        <input id="search" type="search" placeholder="Search names or account IDs…" aria-label="Search departments, PIs, projects, or users">
+        <select id="departmentFilter" aria-label="Filter by department"><option value="">All departments</option></select>
+        <select id="piFilter" aria-label="Filter by PI"><option value="">All PIs</option></select>
+        <select id="projectFilter" aria-label="Filter by project"><option value="">All PN/projects</option></select>
+        <select id="userFilter" aria-label="Filter by user"><option value="">All users</option></select>
+        <select id="level"><option value="all">All levels</option><option value="department">Departments only</option><option value="pi">PIs only</option><option value="project">PN/projects only</option><option value="user">Users only</option></select>
+        <button id="clearFilter">Clear filters</button>
+      </div>
+      <div class="column-tools">
+        <details class="column-picker" id="columnPicker"><summary>Show / hide columns ▾</summary><div class="column-options" id="columnOptions"></div></details>
+        <button id="showAllColumns" type="button">Show all columns</button>
+        <span class="hint">Click any column heading to sort. Click again to reverse the order.</span>
+      </div>
+      <div class="filter-note" id="filterNote">Choose a department, PI, project, or user to narrow the hierarchy. Matching rows retain their parent context.</div>
+      <div class="table-wrap"><table>
+        <thead><tr id="tableHead"></tr></thead>
+        <tbody id="tbody"><tr><td colspan="11" class="empty">Choose a YAML report to display its hierarchy.</td></tr></tbody>
+      </table></div>
+      <div class="footer">Efficiency percentages are averages/medians of job-level measurements, not shares of cluster allocation. Allocation shares are the percentage of the report's total CPU, GPU, or memory allocation-hours. Missing telemetry is shown as an em dash. Use the hierarchy arrows to expand or collapse each department, PI, and project.</div>
+    </section>
+    <section class="panel" id="defaultPanel" style="display:none"><strong>Default account summary</strong><div id="defaultSummary" class="meta" style="margin-top:10px"></div></section>
+  </section>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
+<script>
+(function(){
+ const $=id=>document.getElementById(id);
+ let reportData=null,allRows=[],expanded=new Set(),visibleRows=[],sortKey='name',sortDir=1;
+ const columns=[
+  {key:'name',label:'Hierarchy',value:r=>r.name,type:'text',always:true},
+  {key:'jobs',label:'Jobs',value:r=>r.metrics.jobs},
+  {key:'cpu',label:'CPU hours',value:r=>r.metrics.cpu},
+  {key:'cpuShare',label:'CPU share',value:r=>r.metrics.cpuShare,percent:true},
+  {key:'cpuEff',label:'CPU eff avg / median',value:r=>r.metrics.cpuAvg,kind:'pair',a:r=>r.metrics.cpuAvg,b:r=>r.metrics.cpuMed},
+  {key:'gpu',label:'GPU hours',value:r=>r.metrics.gpu},
+  {key:'gpuShare',label:'GPU share',value:r=>r.metrics.gpuShare,percent:true},
+  {key:'gpuEff',label:'GPU eff avg / median',value:r=>r.metrics.gpuAvg,kind:'pair',a:r=>r.metrics.gpuAvg,b:r=>r.metrics.gpuMed},
+  {key:'mem',label:'Memory GB-hours',value:r=>r.metrics.mem},
+  {key:'memShare',label:'Memory share',value:r=>r.metrics.memShare,percent:true},
+  {key:'ramEff',label:'RAM eff avg / median',value:r=>r.metrics.ramAvg,kind:'pair',a:r=>r.metrics.ramAvg,b:r=>r.metrics.ramMed}
+ ];
+ let shownColumns=new Set(columns.map(c=>c.key));
+ const fmt=(v,d=2)=>v===null||v===undefined||v===''||!Number.isFinite(Number(v))?'—':Number(v).toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:d});
+ const pct=v=>v===null||v===undefined||v===''||!Number.isFinite(Number(v))?'—':fmt(v)+'%';
+ const safe=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ function summaryMetrics(item){const a=item?.allocation_usage||{},e=item?.efficiency||{};return {jobs:item?.jobs??0,cpu:a.cpu_hours??0,cpuShare:a.cpu_hours_pct_cluster,gpu:a.gpu_hours??0,gpuShare:a.gpu_hours_pct_cluster,mem:a.memory_gb_hours??0,memShare:a.memory_gb_hours_pct_cluster,cpuAvg:e.cpu?.average_pct,cpuMed:e.cpu?.median_pct,gpuAvg:e.gpu?.average_pct,gpuMed:e.gpu?.median_pct,ramAvg:e.ram?.average_pct,ramMed:e.ram?.median_pct};}
+ function buildRows(data){const rows=[];function add(item,type,parentId,depth,path,ancestors){const name=String(item?.name??'(unnamed)');const id=path+'/'+type+':'+name;const row={id,name,type,parentId,depth,metrics:summaryMetrics(item),item,ancestors:{...ancestors}};if(type==='department')row.ancestors.department=name;if(type==='pi')row.ancestors.pi=name;if(type==='project')row.ancestors.project=name;if(type==='user')row.ancestors.user=name;rows.push(row);return id;}
+  (data.departments||[]).forEach((dept,di)=>{const did=add(dept,'department',null,0,'d'+di,{});(dept.pis||[]).forEach((pi,pii)=>{const pid=add(pi,'pi',did,1,did+'-pi'+pii,rows.find(r=>r.id===did).ancestors);(pi.projects||[]).forEach((project,pri)=>{const prid=add(project,'project',pid,2,pid+'-pn'+pri,rows.find(r=>r.id===pid).ancestors);(project.users||[]).forEach((user,ui)=>add(user,'user',prid,3,prid+'-u'+ui,rows.find(r=>r.id===prid).ancestors));});});});return rows;}
+ function currentFilters(){return {q:$('search').value.trim().toLowerCase(),department:$('departmentFilter').value,pi:$('piFilter').value,project:$('projectFilter').value,user:$('userFilter').value,level:$('level').value};}
+ function rowMatchesFilters(r,f){if(f.q&&!r.name.toLowerCase().includes(f.q)&&!r.type.toLowerCase().includes(f.q))return false;if(f.department&&r.ancestors.department!==f.department)return false;if(f.pi&&r.ancestors.pi!==f.pi)return false;if(f.project&&r.ancestors.project!==f.project)return false;if(f.user&&r.ancestors.user!==f.user)return false;return true;}
+ function refreshFilterOptions(){const old={department:$('departmentFilter').value,pi:$('piFilter').value,project:$('projectFilter').value,user:$('userFilter').value};const fill=(id,kind,label,rows)=>{const sel=$(id),vals=[...new Set(rows.filter(r=>r.type===kind).map(r=>r.name))].sort((a,b)=>a.localeCompare(b));sel.innerHTML=`<option value="">${label}</option>`+vals.map(v=>`<option value="${safe(v)}">${safe(v)}</option>`).join('');if(vals.includes(old[kind==='department'?'department':kind==='pi'?'pi':kind==='project'?'project':'user']))sel.value=old[kind==='department'?'department':kind==='pi'?'pi':kind==='project'?'project':'user'];};
+  const f=currentFilters();const depts=allRows;fill('departmentFilter','department','All departments',depts);
+  const dept=$('departmentFilter').value;const inDept=allRows.filter(r=>!dept||r.ancestors.department===dept);fill('piFilter','pi','All PIs',inDept);
+  const pi=$('piFilter').value;const inPi=inDept.filter(r=>!pi||r.ancestors.pi===pi);fill('projectFilter','project','All PN/projects',inPi);
+  const project=$('projectFilter').value;const inProject=inPi.filter(r=>!project||r.ancestors.project===project);fill('userFilter','user','All users',inProject);
+ }
+ function renderColumnControls(){ $('columnOptions').innerHTML=columns.map(c=>`<label><input type="checkbox" data-column="${c.key}" ${shownColumns.has(c.key)?'checked':''}> ${safe(c.label)}</label>`).join('');$('columnOptions').querySelectorAll('[data-column]').forEach(cb=>cb.addEventListener('change',()=>{if(cb.checked)shownColumns.add(cb.dataset.column);else shownColumns.delete(cb.dataset.column);render();})); }
+ function renderHead(){const active=columns.filter(c=>shownColumns.has(c.key));$('tableHead').innerHTML=active.map(c=>`<th data-col="${c.key}"><button type="button" class="sort-button" data-sort="${c.key}">${safe(c.label)}<span class="sort-indicator">${sortKey===c.key?(sortDir===1?'▲':'▼'):''}</span></button></th>`).join('');$('tableHead').querySelectorAll('[data-sort]').forEach(b=>b.addEventListener('click',()=>{const k=b.dataset.sort;if(sortKey===k)sortDir*=-1;else{sortKey=k;sortDir=(k==='name'?1:-1);}render();}));}
+ function render(){if(!reportData)return;const f=currentFilters();const childMap=new Map();allRows.forEach(r=>{if(r.parentId){if(!childMap.has(r.parentId))childMap.set(r.parentId,[]);childMap.get(r.parentId).push(r);}});
+  // Keep matching rows and their ancestors so filtered results retain their context.
+  const include=new Set();allRows.forEach(r=>{if(rowMatchesFilters(r,f)){include.add(r.id);let p=r.parentId;while(p){include.add(p);p=allRows.find(x=>x.id===p)?.parentId;}}});
+  const sortCol=columns.find(c=>c.key===sortKey)||columns[0];const cmp=(a,b)=>{let av=sortCol.value(a),bv=sortCol.value(b),result;if(sortCol.type==='text'||sortKey==='name')result=String(av??'').localeCompare(String(bv??''),undefined,{numeric:true,sensitivity:'base'});else{const an=Number(av),bn=Number(bv);const aok=Number.isFinite(an),bok=Number.isFinite(bn);result=aok&&bok?an-bn:aok?1:bok?-1:0;}return result*sortDir||a.name.localeCompare(b.name);};
+  childMap.forEach(arr=>arr.sort(cmp));const roots=allRows.filter(r=>!r.parentId).sort(cmp);const output=[];function walk(r){if(!include.has(r.id))return;const isTarget=rowMatchesFilters(r,f);const showLevel=f.level==='all'||r.type===f.level;if(isTarget&&showLevel)output.push(r);const kids=childMap.get(r.id)||[];const forcedOpen=!!(f.q||f.department||f.pi||f.project||f.user||f.level!=='all');if(kids.length&&(forcedOpen||expanded.has(r.id)))kids.forEach(walk);}
+  roots.forEach(walk);visibleRows=output;renderHead();const active=columns.filter(c=>shownColumns.has(c.key));const html=output.map(r=>{const kids=childMap.get(r.id)||[],m=r.metrics,forcedOpen=!!(f.q||f.department||f.pi||f.project||f.user||f.level!=='all'),open=forcedOpen||expanded.has(r.id);const label=r.type==='project'?'PN / Project':r.type==='department'?'Department':r.type==='pi'?'PI':'User';const toggle=kids.length?`<button class="toggle" data-toggle="${safe(r.id)}" aria-label="${open?'Collapse':'Expand'} ${safe(r.name)}">${open?'▾':'▸'}</button>`:'<span class="toggle" style="display:inline-block"></span>';
+   const cells=active.map(c=>{if(c.key==='name')return `<td><div class="namecell"><span class="indent" style="width:${r.depth*22}px"></span>${toggle}<span class="kind ${r.type}">${label}</span><strong>${safe(r.name)}</strong></div></td>`;if(c.kind==='pair')return `<td>${pct(c.a(r))} / ${pct(c.b(r))}</td>`;if(c.percent)return `<td>${pct(c.value(r))}${bar(c.value(r))}</td>`;return `<td class="num">${fmt(c.value(r),c.key==='jobs'?0:2)}</td>`;}).join('');return `<tr>${cells}</tr>`;}).join('');$('tbody').innerHTML=html||`<tr><td colspan="${Math.max(1,active.length)}" class="empty">No rows match these filters.</td></tr>`;
+  $('tbody').querySelectorAll('[data-toggle]').forEach(b=>b.addEventListener('click',()=>{const id=b.getAttribute('data-toggle');if(expanded.has(id))expanded.delete(id);else expanded.add(id);render();}));$('exportCsv').disabled=!output.length;$('filterNote').textContent=`Showing ${output.length.toLocaleString()} matching row(s). Sorting: ${sortCol.label} (${sortDir===1?'ascending':'descending'}). Parent rows are retained to show hierarchy.`;
+ }
+ function bar(v){if(v===null||v===undefined||v===''||!Number.isFinite(Number(v)))return '';const w=Math.max(0,Math.min(100,Number(v)));return `<div class="bar"><span style="width:${w}%"></span></div>`;}
+ function loadText(text,name){$('error').textContent='';try{if(!window.jsyaml)throw new Error('The YAML parser library did not load. Connect to the internet and reload this page.');const data=jsyaml.load(text);if(!data||typeof data!=='object'||!Array.isArray(data.departments))throw new Error('This does not look like a resource-efficiency report: expected a top-level "departments" list.');reportData=data;allRows=buildRows(data);expanded=new Set(allRows.filter(r=>r.depth<2).map(r=>r.id));$('cluster').textContent=data.cluster||'—';const p=data.period||{};$('period').textContent=(p.start||'—')+' → '+(p.end_exclusive||'—');$('generated').textContent=data.generated_at||'—';const t=data.cluster_totals||{};$('jobs').textContent=fmt(t.jobs,0);$('cpuHours').textContent=fmt(t.cpu_hours);$('gpuHours').textContent=fmt(t.gpu_hours);$('memHours').textContent=fmt(t.memory_gb_hours);$('report').classList.remove('hidden');$('expandAll').disabled=false;$('collapseAll').disabled=false;$('error').textContent='';$('defaultPanel').style.display=data.default_account?'block':'none';if(data.default_account){const m=summaryMetrics(data.default_account.summary||{});$('defaultSummary').innerHTML=`Jobs: <strong>${fmt(m.jobs,0)}</strong> · CPU hours: <strong>${fmt(m.cpu)}</strong> · GPU hours: <strong>${fmt(m.gpu)}</strong> · Memory GB-hours: <strong>${fmt(m.mem)}</strong>`;}refreshFilterOptions();renderColumnControls();render();}
+  catch(e){$('report').classList.add('hidden');$('error').textContent='Could not read report: '+e.message;}}
+ $('file').addEventListener('change',e=>{const f=e.target.files&&e.target.files[0];if(f)f.text().then(t=>loadText(t,f.name)).catch(err=>$('error').textContent='Could not read file: '+err.message);});
+ const dz=$('dropzone');['dragenter','dragover'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add('drag');}));['dragleave','drop'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove('drag');}));dz.addEventListener('drop',e=>{const f=e.dataTransfer.files&&e.dataTransfer.files[0];if(f)f.text().then(t=>loadText(t,f.name));});
+ async function autoLoadDefaultReport(){if(location.protocol==='file:'){$('error').textContent='Default report is slurm_eff.yaml. Since this page is opened directly from your computer, select that file below; browsers block automatic reading of neighboring local files.';return;}try{const response=await fetch('./slurm_eff.yaml',{cache:'no-store'});if(!response.ok)throw new Error('HTTP '+response.status);loadText(await response.text(),'slurm_eff.yaml');}catch(e){$('error').textContent='Could not automatically load slurm_eff.yaml. Place it beside this HTML file on the same web server, or select the YAML file manually. ('+e.message+')';}}
+ $('search').addEventListener('input',render);['departmentFilter','piFilter','projectFilter','userFilter','level'].forEach(id=>$(id).addEventListener('change',()=>{if(id==='departmentFilter'||id==='piFilter'||id==='projectFilter')refreshFilterOptions();render();}));$('clearFilter').addEventListener('click',()=>{$('search').value='';['departmentFilter','piFilter','projectFilter','userFilter'].forEach((id,i)=>$(id).value='');$('level').value='all';refreshFilterOptions();render();});
+ $('expandAll').addEventListener('click',()=>{expanded=new Set(allRows.filter(r=>r.type!=='user').map(r=>r.id));render();});$('collapseAll').addEventListener('click',()=>{expanded.clear();render();});$('showAllColumns').addEventListener('click',()=>{shownColumns=new Set(columns.map(c=>c.key));renderColumnControls();render();});
+ $('exportCsv').addEventListener('click',()=>{const active=columns.filter(c=>shownColumns.has(c.key));const headers=active.map(c=>c.label);const rows=visibleRows.map(r=>active.map(c=>c.key==='name'?r.name:c.kind==='pair'?`${c.a(r)??''} / ${c.b(r)??''}`:c.value(r)??''));const esc=v=>'"'+String(v??'').replace(/"/g,'""')+'"';const csv=[headers,...rows].map(r=>r.map(esc).join(',')).join('\r\n');const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='slurm-resource-efficiency-visible-rows.csv';a.click();URL.revokeObjectURL(a.href);});
+ autoLoadDefaultReport();
+})();
+</script>
+</body>
+</html>
